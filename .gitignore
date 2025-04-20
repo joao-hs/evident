@@ -1,0 +1,20 @@
+# debug:
+backup
+
+# Ignore
+## common:
+tmp
+.venv
+
+## project-specific:
+base/config/*
+base/artifacts/*
+base/provision/secrets/*
+
+# Except:
+## common:
+!.gitkeep
+
+## project-specific:
+!base/config/templates
+!README.md
