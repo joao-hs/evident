@@ -21,7 +21,7 @@ fill_secrets() {
 }
 
 ssh -i $SSH_HOST_PRIVATE_KEY_PATH -p $SSH_FORWARDED_PORT "${REMOTE_USER}@${REMOTE_HOST}" bash -s << EOF
-srm -r ~/provision
+srm -r ~/provision > /dev/null 2>&1
 mkdir ~/provision
 EOF
 

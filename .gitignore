@@ -5,6 +5,8 @@ backup
 ## common:
 tmp
 .venv
+.vscode
+__pycache__
 
 ## project-specific:
 base/config/*
