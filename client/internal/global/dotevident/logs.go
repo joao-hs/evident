@@ -33,9 +33,9 @@ func newLogs(dotEvidentPath string) logs {
 func (self *logsImpl) GetLogFilePath(cmd string) string {
 	now := time.Now()
 	return filepath.Join(self.logsPath,
-		fmt.Sprintf("%s-%d%d%d_%d%d%d.log",
+		fmt.Sprintf("%s-%04d%02d%02d_%02d%02d%02d.log",
 			cmd,
-			now.Year(), now.Month(), now.Day(),
+			now.Year(), int(now.Month()), now.Day(),
 			now.Hour(), now.Minute(), now.Second(),
 		))
 }

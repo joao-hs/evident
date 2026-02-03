@@ -13,33 +13,33 @@ type Logger interface {
 
 	// Spaces are added between arguments when neither is a string.
 
-	Debug(args ...interface{})
-	Info(args ...interface{})
-	Warn(args ...interface{})
-	Error(args ...interface{})
-	DPanic(args ...interface{})
-	Panic(args ...interface{})
-	Fatal(args ...interface{})
+	Debug(args ...any)
+	Info(args ...any)
+	Warn(args ...any)
+	Error(args ...any)
+	DPanic(args ...any)
+	Panic(args ...any)
+	Fatal(args ...any)
 
 	// Formats message according to a format specifier.
 
-	Debugf(template string, args ...interface{})
-	Infof(template string, args ...interface{})
-	Warnf(template string, args ...interface{})
-	Errorf(template string, args ...interface{})
-	DPanicf(template string, args ...interface{})
-	Panicf(template string, args ...interface{})
-	Fatalf(template string, args ...interface{})
+	Debugf(template string, args ...any)
+	Infof(template string, args ...any)
+	Warnf(template string, args ...any)
+	Errorf(template string, args ...any)
+	DPanicf(template string, args ...any)
+	Panicf(template string, args ...any)
+	Fatalf(template string, args ...any)
 
 	// Spaces are always added between arguments.
 
-	Debugln(args ...interface{})
-	Infoln(args ...interface{})
-	Warnln(args ...interface{})
-	Errorln(args ...interface{})
-	DPanicln(args ...interface{})
-	Panicln(args ...interface{})
-	Fatalln(args ...interface{})
+	Debugln(args ...any)
+	Infoln(args ...any)
+	Warnln(args ...any)
+	Errorln(args ...any)
+	DPanicln(args ...any)
+	Panicln(args ...any)
+	Fatalln(args ...any)
 
 	SetDebugLevel()
 }
@@ -72,6 +72,11 @@ func initLogger() Logger {
 	consoleEncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	consoleEncoder := zapcore.NewConsoleEncoder(consoleEncoderConfig)
 
+	infoConsoleEncoderConfig := zapcore.EncoderConfig{
+		MessageKey: "msg",
+	}
+	infoConsoleEncoder := zapcore.NewConsoleEncoder(infoConsoleEncoderConfig)
+
 	cores := []zapcore.Core{
 		zapcore.NewCore(
 			fileEncoder,
@@ -80,10 +85,18 @@ func initLogger() Logger {
 		),
 
 		zapcore.NewCore(
+			infoConsoleEncoder,
+			zapcore.Lock(os.Stdout),
+			zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+				return lvl == zap.InfoLevel
+			}),
+		),
+
+		zapcore.NewCore(
 			consoleEncoder,
 			zapcore.Lock(os.Stdout),
 			zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-				return lvl >= level.Level() && lvl <= zapcore.InfoLevel
+				return lvl >= level.Level() && lvl < zapcore.InfoLevel
 			}),
 		),
 

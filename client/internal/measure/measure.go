@@ -3,6 +3,7 @@ package measure
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -92,7 +93,11 @@ func (self *vmImageMeasurer) MeasureImage(imagePath string) (map[int]string, err
 	log.Get().Debugln("Creating temporary directory:", _EVIDENT_TMP_PATH)
 	err = os.MkdirAll(_EVIDENT_TMP_PATH, 0755)
 	if err != nil {
-		return returnMeasures, fmt.Errorf("failed to create temporary directory: %v", err)
+		if errors.Is(err, os.ErrExist) {
+			log.Get().Debugln("Temporary directory already exists:", _EVIDENT_TMP_PATH)
+		} else {
+			return returnMeasures, fmt.Errorf("failed to create temporary directory: %v", err)
+		}
 	}
 
 	log.Get().Debugln("Writing UKI to temporary path:", _UKI_TMP_PATH)
