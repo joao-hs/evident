@@ -1,0 +1,236 @@
+package amdkds
+
+import (
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
+	"fmt"
+	"io"
+	"net/http"
+	"sync"
+	"time"
+
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/domain"
+)
+
+const (
+	base                       = "https://kdsintf.amd.com/"
+	vcekCertChainURIV1Template = "vcek/v1/%s/cert_chain" // productName (ASN.1 IA5String)
+	vcekCRLURIV1Template       = "vcek/v1/%s/crl"        // productName (ASN.1 IA5String)
+	vcekURIV1Template          = "vcek/v1/%s/%s"         // productName (ASN.1 IA5String), chipID (ASN.1 OCTET STRING)
+)
+
+type AMDKDS interface {
+	FetchCRL(model domain.AMDSEVSNPModel) error
+	GetVCEKParentChain(model domain.AMDSEVSNPModel) ([]*x509.Certificate, error)
+	GetAsk(model domain.AMDSEVSNPModel) (*x509.Certificate, error)
+	GetArk(model domain.AMDSEVSNPModel) (*x509.Certificate, error)
+}
+
+type amdkds struct {
+	httpClient         *http.Client
+	ARK                map[domain.AMDSEVSNPModel]*x509.Certificate // map[productName]ARK
+	ASK                map[domain.AMDSEVSNPModel]*x509.Certificate // map[productName]ASK
+	certRevocationList *x509.RevocationList
+	lastCRLFetch       time.Time
+}
+
+var (
+	instance AMDKDS
+	once     sync.Once
+)
+
+func GetInstance() AMDKDS {
+	once.Do(func() {
+		instance = &amdkds{
+			httpClient: &http.Client{
+				CheckRedirect: func(req *http.Request, via []*http.Request) error {
+					return fmt.Errorf("redirects are not allowed (redirected to %s)", req.URL.String())
+				},
+			},
+			ARK:                make(map[domain.AMDSEVSNPModel]*x509.Certificate),
+			ASK:                make(map[domain.AMDSEVSNPModel]*x509.Certificate),
+			certRevocationList: nil,
+			lastCRLFetch:       time.Time{},
+		}
+	})
+	return instance
+}
+
+func (self *amdkds) FetchCRL(model domain.AMDSEVSNPModel) error {
+	if !self.lastCRLFetch.IsZero() && time.Since(self.lastCRLFetch) < 24*time.Hour && self.certRevocationList != nil {
+		return nil
+	}
+
+	url := fmt.Sprintf(base+vcekCRLURIV1Template, model.String())
+	resp, err := self.httpClient.Get(url)
+	if err != nil {
+		fmt.Printf("Error making GET request: %v\n", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.TLS.Version != tls.VersionTLS13 && resp.TLS.Version != tls.VersionTLS12 {
+		fmt.Printf("Insecure TLS version: %x\n", resp.TLS.Version)
+		return fmt.Errorf("insecure TLS version: %x", resp.TLS.Version)
+	}
+
+	if resp.StatusCode != 200 {
+		fmt.Printf("Non-200 response: %d\n", resp.StatusCode)
+		return fmt.Errorf("non-200 response: %d", resp.StatusCode)
+	}
+
+	crlDer, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("Error reading response body: %v\n", err)
+		return err
+	}
+
+	revocationList, err := x509.ParseRevocationList(crlDer)
+	if err != nil {
+		fmt.Printf("Error parsing CRL: %v\n", err)
+		return err
+	}
+
+	self.certRevocationList = revocationList
+	self.lastCRLFetch = time.Now()
+
+	if revocationList.RevokedCertificateEntries == nil {
+		return nil
+	}
+
+	return nil
+}
+
+func (self *amdkds) GetVCEKParentChain(model domain.AMDSEVSNPModel) ([]*x509.Certificate, error) {
+	if self.ARK[model] != nil && self.ASK[model] != nil {
+		return []*x509.Certificate{self.ASK[model], self.ARK[model]}, nil
+	}
+
+	url := fmt.Sprintf(base+vcekCertChainURIV1Template, model.String())
+	resp, err := self.httpClient.Get(url)
+	if err != nil {
+		fmt.Printf("Error making GET request: %v\n", err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.TLS.Version != tls.VersionTLS13 && resp.TLS.Version != tls.VersionTLS12 {
+		fmt.Printf("Insecure TLS version: %x\n", resp.TLS.Version)
+		return nil, fmt.Errorf("insecure TLS version: %x", resp.TLS.Version)
+	}
+
+	if resp.StatusCode != 200 {
+		fmt.Printf("Non-200 response: %d\n", resp.StatusCode)
+		return nil, fmt.Errorf("non-200 response: %d", resp.StatusCode)
+	}
+
+	certificatePemBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("Error reading response body: %v\n", err)
+		return nil, err
+	}
+
+	certChain, err := parseCertificateChain(certificatePemBytes)
+	if err != nil {
+		fmt.Printf("Error parsing certificate chain: %v\n", err)
+		return nil, err
+	}
+
+	self.ARK[model] = certChain[1]
+	self.ASK[model] = certChain[0]
+	return certChain, nil
+}
+
+func (self *amdkds) GetAsk(model domain.AMDSEVSNPModel) (*x509.Certificate, error) {
+	if self.ASK[model] != nil {
+		return self.ASK[model], nil
+	}
+
+	_, err := self.GetVCEKParentChain(model)
+	if err != nil {
+		return nil, err
+	}
+
+	return self.ASK[model], nil
+}
+
+func (self *amdkds) GetArk(model domain.AMDSEVSNPModel) (*x509.Certificate, error) {
+	if self.ARK[model] != nil {
+		return self.ARK[model], nil
+	}
+
+	_, err := self.GetVCEKParentChain(model)
+	if err != nil {
+		return nil, err
+	}
+
+	return self.ARK[model], nil
+}
+
+// Utils
+
+func isCertificateRevoked(cert *x509.Certificate, crl *x509.RevocationList) bool {
+	if crl == nil {
+		return false
+	}
+
+	if cert.Issuer.SerialNumber != crl.Issuer.SerialNumber {
+		fmt.Println("Warning: certificate issuer does not match CRL issuer")
+	}
+
+	for _, revokedCert := range crl.RevokedCertificateEntries {
+		if cert.SerialNumber.Cmp(revokedCert.SerialNumber) == 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
+func parseCertificateChain(pemBytes []byte) ([]*x509.Certificate, error) {
+	var derBytesCertChain [][]byte = [][]byte{}
+	var block *pem.Block
+	var rest []byte = pemBytes
+	for len(rest) > 0 {
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		if block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
+			continue
+		}
+		derBytesCertChain = append(derBytesCertChain, block.Bytes)
+	}
+
+	if len(derBytesCertChain) != 2 {
+		return nil, fmt.Errorf("certificate chain must contain exactly two PEM blocks")
+	}
+
+	cert1, err := x509.ParseCertificate(derBytesCertChain[0])
+	if err != nil {
+		return nil, err
+	}
+
+	cert2, err := x509.ParseCertificate(derBytesCertChain[1])
+	if err != nil {
+		return nil, err
+	}
+
+	return []*x509.Certificate{cert1, cert2}, nil
+}
+
+func parseCertificate(derBytes []byte) (*x509.Certificate, error) {
+	certs, err := x509.ParseCertificates(derBytes)
+	if err != nil {
+		return nil, err
+	}
+	if len(certs) == 0 {
+		return nil, fmt.Errorf("no certificates found")
+	}
+
+	if len(certs) > 1 {
+		fmt.Printf("Warning: multiple certificates found, using the first one\n")
+	}
+	return certs[0], nil
+}
