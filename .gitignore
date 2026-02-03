@@ -1,22 +1,4 @@
-# debug:
-backup
-
-# Ignore
-## common:
-tmp
-.venv
-.vscode
-__pycache__
-
-## project-specific:
-base/config/*
-base/artifacts/*
-base/provision/secrets/*
-
-# Except:
-## common:
-!.gitkeep
-
-## project-specific:
-!base/config/templates
-!README.md
+/dev.lima
+/dev.python
+/.vscode
+/.zed

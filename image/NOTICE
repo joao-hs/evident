@@ -1,0 +1,19 @@
+This directory is based on the reproducible-immutable-nixos project.
+
+Original project:
+Name: reproducible-immutable-nixos
+Repository: https://github.com/msanft/reproducible-immutable-nixos
+License: GNU General Public License v2.0
+
+Copyright (c) 2024 Moritz Sanft
+
+Modifications:
+Copyright (c) 2026 João Sereno
+
+Changes made:
+- Naming and file structure.
+- Inclusion of the Evident server.
+- Safer debug image configuration.
+- Platform-specific additional configurations.
+
+This directory remains licensed under GPL v2.0.
