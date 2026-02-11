@@ -18,7 +18,7 @@ import (
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/grpc"
 )
 
-func RunSnpGceAttestationWorkflow(ctx context.Context, client *grpc.Client, cpuCount uint32, expectedPCRs domain.ExpectedPcrDigests) error {
+func RunSnpGceAttestationWorkflow(ctx context.Context, client *grpc.Client, cpuCount uint8, expectedPCRs domain.ExpectedPcrDigests) error {
 	var (
 		err                        error
 		getSnpEvidenceOutput       getsnpevidence.Output
@@ -70,7 +70,7 @@ func RunSnpGceAttestationWorkflow(ctx context.Context, client *grpc.Client, cpuC
 
 	log.Get().Infoln("Getting endorsed artifacts for hardware evidence measurement verification")
 	getendorsedartifactsOutput, err = getgceendorsedartifacts.Task(ctx, getgceendorsedartifacts.Input{
-		CPUCount:   cpuCount,
+		CPUCount:   uint32(cpuCount),
 		HwEvidence: getSnpEvidenceOutput.HwEvidence,
 	})
 	if err != nil {
@@ -83,7 +83,7 @@ func RunSnpGceAttestationWorkflow(ctx context.Context, client *grpc.Client, cpuC
 		verifysnpmeasurement.Input{
 			SnpEvidence:     getSnpEvidenceOutput.HwEvidence,
 			OvmfBinaryBytes: getendorsedartifactsOutput.OvmfBinaryBytes,
-			CPUCount:        cpuCount,
+			CPUCount:        int(cpuCount),
 		},
 	)
 	if err != nil {

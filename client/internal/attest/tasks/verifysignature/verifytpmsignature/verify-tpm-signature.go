@@ -3,9 +3,11 @@ package verifytpmsignature
 import (
 	"context"
 	"crypto/x509"
+	"encoding/hex"
 	"fmt"
 
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/domain"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 )
 
 type Input struct {
@@ -23,18 +25,23 @@ func Task(ctx context.Context, input Input) (Output, error) {
 		zeroOutput Output
 	)
 
+	log.Get().Debugln("Verifying TPM quote signature certificate chain")
 	certChain := domain.NewCertChain(input.Ak)
+	log.Get().Debugf("Attestation Key (AK) certificate, valid as leaf: %s\n", hex.EncodeToString(input.Ak.Raw))
 	if err = certChain.AddParent(input.IntermediateAkCA); err != nil {
 		return zeroOutput, err
 	}
-
+	log.Get().Debugf("Intermediate AK CA certificate, valid as AK's parent: %s\n", hex.EncodeToString(input.IntermediateAkCA.Raw))
 	if err = certChain.AddParent(input.RootAkCA); err != nil {
 		return zeroOutput, err
 	}
+	log.Get().Debugf("Root AK CA certificate, valid as Intermediate AK CA's parent: %s\n", hex.EncodeToString(input.RootAkCA.Raw))
+	log.Get().Debugln("Certificate chain for TPM quote signature is valid")
 
 	signedRaw := input.SwEvidence.Raw()
 	signedRaw.SetCertChain(certChain)
 
+	log.Get().Debugln("Verifying the signature of the TPM quote")
 	ok, err := signedRaw.IsOk()
 	if err != nil {
 		return zeroOutput, err
@@ -42,6 +49,7 @@ func Task(ctx context.Context, input Input) (Output, error) {
 	if !ok {
 		return zeroOutput, fmt.Errorf("signature verification for TPM quote failed")
 	}
+	log.Get().Debugln("The TPM quote signature from AK is valid")
 
 	return zeroOutput, nil
 }

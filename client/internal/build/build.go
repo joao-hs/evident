@@ -2,16 +2,19 @@ package build
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 )
 
 type VMImageBuilder interface {
 	BuildImage(flakePath string, variation string, imageOutputPath string) error
-	ShowBuildImageCommands(flakePath string, variation string, imageOutputPath string)
+	GetEquivalentCommands(flakePath string, variation string, imageOutputPath string) string
 }
 
 type vmImageBuilder struct {
@@ -22,8 +25,9 @@ type vmImageBuilder struct {
 const (
 	_NIX                      = "nix"
 	_CP                       = "cp"
-	_NIX_RESULT_PATH          = "/tmp/evident"
-	_NIX_RESULT_VM_IMAGE_PATH = "/tmp/evident/disk.raw"
+	_EVIDENT_TMP_PATH         = "/tmp/evident"
+	_NIX_RESULT_PATH          = "/tmp/evident/result"
+	_NIX_RESULT_VM_IMAGE_PATH = "/tmp/evident/result/disk.raw"
 )
 
 func NewVMImageBuilder() (VMImageBuilder, error) {
@@ -67,6 +71,17 @@ func (self *vmImageBuilder) BuildImage(flakePath string, variation string, image
 		buildOut bytes.Buffer
 		buildErr bytes.Buffer
 	)
+
+	log.Get().Debugln("Creating temporary directory:", _EVIDENT_TMP_PATH)
+	err = os.MkdirAll(_EVIDENT_TMP_PATH, 0755)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			log.Get().Debugln("Temporary directory already exists:", _EVIDENT_TMP_PATH)
+		} else {
+			return fmt.Errorf("failed to create temporary directory: %v", err)
+		}
+	}
+
 	log.Get().Debugln("Running:", self.nixCmd, "build", fmt.Sprintf("%s#%s", flakePath, variation), "-o", _NIX_RESULT_PATH)
 	buildCmd := exec.Command(self.nixCmd, "build", fmt.Sprintf("%s#%s", flakePath, variation), "-o", _NIX_RESULT_PATH)
 
@@ -93,7 +108,9 @@ func (self *vmImageBuilder) BuildImage(flakePath string, variation string, image
 	return nil
 }
 
-func (self *vmImageBuilder) ShowBuildImageCommands(flakePath string, variation string, imageOutputPath string) {
-	fmt.Printf("%s build %s#%s -o %s && \\\n", self.nixCmd, flakePath, variation, _NIX_RESULT_PATH)
-	fmt.Printf("%s %s %s\n", self.cpCmd, _NIX_RESULT_VM_IMAGE_PATH, imageOutputPath)
+func (self *vmImageBuilder) GetEquivalentCommands(flakePath string, variation string, imageOutputPath string) string {
+	output := strings.Builder{}
+	fmt.Fprintf(&output, "%s build %s#%s -o %s && ", self.nixCmd, flakePath, variation, _NIX_RESULT_PATH)
+	fmt.Fprintf(&output, "%s %s %s", self.cpCmd, _NIX_RESULT_VM_IMAGE_PATH, imageOutputPath)
+	return output.String()
 }

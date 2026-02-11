@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/domain"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/measure"
 )
 
@@ -47,7 +47,7 @@ var measureCmd = &cobra.Command{
 			panic("could not parse 'show' flag")
 		}
 		if show {
-			vmImageMeasurer.ShowMeasureImageCommands(imagePath, outputFile)
+			log.Get().Infoln(vmImageMeasurer.GetEquivalentCommands(imagePath, outputFile))
 			return nil
 		}
 
@@ -56,17 +56,7 @@ var measureCmd = &cobra.Command{
 			return err
 		}
 
-		var outputMeasureJsonStruct domain.ExpectedPcrDigests
-
-		for i := range 24 {
-			if digest, ok := measures[i]; ok {
-				if ok := outputMeasureJsonStruct.SetDigestAtIndex(i, digest); !ok {
-					return fmt.Errorf("could not set digest for PCR index %d", i)
-				}
-			}
-		}
-
-		outputMeasureString, err := json.MarshalIndent(outputMeasureJsonStruct, "", "  ")
+		outputMeasureString, err := json.MarshalIndent(measures, "", "  ")
 		if err != nil {
 			return err
 		}
@@ -77,7 +67,7 @@ var measureCmd = &cobra.Command{
 				return fmt.Errorf("could not write output to file: %s", err.Error())
 			}
 		} else {
-			fmt.Println(string(outputMeasureString))
+			log.Get().Infoln(string(outputMeasureString))
 		}
 
 		return nil

@@ -10,12 +10,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/domain"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 )
 
 type VMImageMeasurer interface {
-	MeasureImage(imagePath string) (map[int]string, error)
-	ShowMeasureImageCommands(imagePath string, outputFile string)
+	MeasureImage(imagePath string) (domain.ExpectedPcrDigests, error)
+	GetEquivalentCommands(imagePath string, outputFile string) string
 }
 
 type vmImageMeasurer struct {
@@ -68,26 +69,23 @@ func (self *vmImageMeasurer) checkRequiredExternalCommands() error {
 	return nil
 }
 
-func (self *vmImageMeasurer) MeasureImage(imagePath string) (map[int]string, error) {
+func (self *vmImageMeasurer) MeasureImage(imagePath string) (domain.ExpectedPcrDigests, error) {
 	var (
-		returnMeasures   map[int]string = make(map[int]string)
+		zeroOutput   domain.ExpectedPcrDigests
 		dissectOutBuffer bytes.Buffer
 		dissectErrBuffer bytes.Buffer
 		pcrLockOutBuffer bytes.Buffer
 		pcrLockErrBuffer bytes.Buffer
 	)
 
-	if os.Geteuid() != 0 {
-		return returnMeasures, fmt.Errorf("measuring a VM image requires root privileges; please run as root or via sudo; alternatively, use the flag --show and run the shown commands manually to obtain the same output")
-	}
-
-	log.Get().Debugln("Running:", self.systemdDissectCmd, "--copy-from", imagePath, _UKI_PATH_INSIDE_IMAGE)
-	dissectCmd := exec.Command(self.systemdDissectCmd, "--copy-from", imagePath, _UKI_PATH_INSIDE_IMAGE)
+	log.Get().Warnln("Running as sudo:", self.systemdDissectCmd, "--copy-from", imagePath, _UKI_PATH_INSIDE_IMAGE)
+	dissectCmd := exec.Command("sudo", self.systemdDissectCmd, "--copy-from", imagePath, _UKI_PATH_INSIDE_IMAGE)
+	dissectCmd.Stdin = os.Stdin // in case sudo needs password input
 	dissectCmd.Stdout = &dissectOutBuffer
 	dissectCmd.Stderr = &dissectErrBuffer
 	err := dissectCmd.Run()
 	if err != nil {
-		return returnMeasures, fmt.Errorf("systemd-dissect command failed: %v: %s", err, dissectErrBuffer.String())
+		return zeroOutput, fmt.Errorf("systemd-dissect command failed: %v: %s", err, dissectErrBuffer.String())
 	}
 
 	log.Get().Debugln("Creating temporary directory:", _EVIDENT_TMP_PATH)
@@ -96,14 +94,14 @@ func (self *vmImageMeasurer) MeasureImage(imagePath string) (map[int]string, err
 		if errors.Is(err, os.ErrExist) {
 			log.Get().Debugln("Temporary directory already exists:", _EVIDENT_TMP_PATH)
 		} else {
-			return returnMeasures, fmt.Errorf("failed to create temporary directory: %v", err)
+			return zeroOutput, fmt.Errorf("failed to create temporary directory: %v", err)
 		}
 	}
 
 	log.Get().Debugln("Writing UKI to temporary path:", _UKI_TMP_PATH)
 	err = os.WriteFile(_UKI_TMP_PATH, dissectOutBuffer.Bytes(), 0644)
 	if err != nil {
-		return returnMeasures, fmt.Errorf("failed to write UKI to temporary path: %v", err)
+		return zeroOutput, fmt.Errorf("failed to write UKI to temporary path: %v", err)
 	}
 
 	log.Get().Debugln("Running:", self.systemdPcrLockCmd, "lock-uki", _UKI_TMP_PATH)
@@ -112,7 +110,7 @@ func (self *vmImageMeasurer) MeasureImage(imagePath string) (map[int]string, err
 	pcrLockCmd.Stderr = &pcrLockErrBuffer
 	err = pcrLockCmd.Run()
 	if err != nil {
-		return returnMeasures, fmt.Errorf("systemd-pcrlock command failed: %v: %s", err, pcrLockErrBuffer.String())
+		return zeroOutput, fmt.Errorf("systemd-pcrlock command failed: %v: %s", err, pcrLockErrBuffer.String())
 	}
 
 	var pcrLockOutput struct {
@@ -127,34 +125,42 @@ func (self *vmImageMeasurer) MeasureImage(imagePath string) (map[int]string, err
 
 	err = json.Unmarshal(pcrLockOutBuffer.Bytes(), &pcrLockOutput)
 	if err != nil {
-		return returnMeasures, err
+		return zeroOutput, err
 	}
+
+	measures := make(map[int]string)
 
 	// PCR 12 must be asserted to 0x0 since it measures UKI section overwrites and addons that may change
 	// expected behavior of the UKI.
-	returnMeasures[12] = "0000000000000000000000000000000000000000000000000000000000000000" // sha256-sized (32 bytes) hex represented
+	measures[12] = "0000000000000000000000000000000000000000000000000000000000000000" // sha256-sized (32 bytes) hex represented
 
 	// we want the last sha256 digest for each PCR
 	for _, record := range pcrLockOutput.Records {
 		for _, digest := range record.Digests {
 			if digest.HashAlg == "sha256" {
-				returnMeasures[record.PCR] = digest.Digest
+				measures[record.PCR] = digest.Digest
 				break
 			}
 		}
 	}
 
-	return returnMeasures, nil
+	output := domain.ExpectedPcrDigests{}
+	for pcrIndex, digest := range measures {
+		output.SetDigestAtIndex(pcrIndex, digest)
+	}
+
+	return output, nil
 }
 
-func (self *vmImageMeasurer) ShowMeasureImageCommands(imagePath string, outputFile string) {
-	fmt.Printf("mkdir -p %s 1>/dev/null 2>&1 && \\\n", filepath.Dir(_UKI_TMP_PATH))
-	fmt.Printf("sudo %s --copy-from %s %s > %s && \\\n", self.systemdDissectCmd, imagePath, _UKI_PATH_INSIDE_IMAGE, _UKI_TMP_PATH)
-	fmt.Printf("%s lock-uki %s | jq '%s'", self.systemdPcrLockCmd, _UKI_TMP_PATH, jqQuery)
+func (self *vmImageMeasurer) GetEquivalentCommands(imagePath string, outputFile string) string {
+	output := strings.Builder{}
+	fmt.Fprintf(&output, "mkdir -p %s 1>/dev/null 2>&1 && ", filepath.Dir(_UKI_TMP_PATH))
+	fmt.Fprintf(&output, "sudo %s --copy-from %s %s > %s && ", self.systemdDissectCmd, imagePath, _UKI_PATH_INSIDE_IMAGE, _UKI_TMP_PATH)
+	fmt.Fprintf(&output, "%s lock-uki %s | jq '%s'", self.systemdPcrLockCmd, _UKI_TMP_PATH, jqQuery)
 	if outputFile != "" {
-		fmt.Printf(" > %s", outputFile)
+		fmt.Fprintf(&output, " > %s", outputFile)
 	}
-	fmt.Printf("\n")
+	return output.String()
 }
 
 func init() {
