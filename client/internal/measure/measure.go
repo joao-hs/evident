@@ -9,11 +9,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/diskfs/go-diskfs"
+	"github.com/diskfs/go-diskfs/backend/file"
+	"github.com/diskfs/go-diskfs/partition/gpt"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/domain"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 )
@@ -56,16 +60,15 @@ type vmImageMeasurer struct {
 }
 
 const (
-	_SYSTEMD_DISSECT          = "systemd-dissect"
 	_SYSTEMD_PCRLOCK          = "systemd-pcrlock"
 	_ALT_PATH_SYSTEMD_PCRLOCK = "/usr/lib/systemd/systemd-pcrlock" // usually /usr/lib/systemd/ is not in PATH
-	_UKI_PATH_INSIDE_IMAGE    = "/boot/EFI/BOOT/BOOTX64.EFI"
-	_EVIDENT_TMP_PATH         = "/tmp/evident"
-	_UKI_TMP_PATH             = "/tmp/evident/uki.efi"
-)
 
-var (
-	jqQuery string
+	_ESP_PARTITION_NAME       = "esp"
+	_ESP_PARTITION_MOUNT_PATH = "/boot"
+	_UKI_PATH_INSIDE_IMAGE    = "/boot/EFI/BOOT/BOOTX64.EFI"
+
+	_EVIDENT_TMP_PATH = "/tmp/evident"
+	_UKI_TMP_PATH     = "/tmp/evident/uki.efi"
 )
 
 func NewVMImageMeasurer() (VMImageMeasurer, error) {
@@ -83,11 +86,6 @@ func NewVMImageMeasurer() (VMImageMeasurer, error) {
 func (self *vmImageMeasurer) checkRequiredExternalCommands() error {
 	var err error
 
-	self.systemdDissectCmd, err = exec.LookPath(_SYSTEMD_DISSECT)
-	if err != nil {
-		return fmt.Errorf("`systemd-dissect` command is not present in PATH; might need to install 'systemd-container' package")
-	}
-
 	self.systemdPcrLockCmd, err = exec.LookPath(_SYSTEMD_PCRLOCK)
 	if err != nil {
 		self.systemdPcrLockCmd, err = exec.LookPath(_ALT_PATH_SYSTEMD_PCRLOCK)
@@ -103,24 +101,12 @@ func (self *vmImageMeasurer) checkRequiredExternalCommands() error {
 func (self *vmImageMeasurer) MeasureImage(imagePath string) (domain.ExpectedPcrDigests, error) {
 	var (
 		zeroOutput       domain.ExpectedPcrDigests
-		dissectOutBuffer bytes.Buffer
-		dissectErrBuffer bytes.Buffer
 		pcrLockOutBuffer bytes.Buffer
 		pcrLockErrBuffer bytes.Buffer
 	)
 
-	log.Get().Warnln("Running as sudo:", self.systemdDissectCmd, "--copy-from", imagePath, _UKI_PATH_INSIDE_IMAGE)
-	dissectCmd := exec.Command("sudo", self.systemdDissectCmd, "--copy-from", imagePath, _UKI_PATH_INSIDE_IMAGE)
-	dissectCmd.Stdin = os.Stdin // in case sudo needs password input
-	dissectCmd.Stdout = &dissectOutBuffer
-	dissectCmd.Stderr = &dissectErrBuffer
-	err := dissectCmd.Run()
-	if err != nil {
-		return zeroOutput, fmt.Errorf("systemd-dissect command failed: %v: %s", err, dissectErrBuffer.String())
-	}
-
 	log.Get().Debugln("Creating temporary directory:", _EVIDENT_TMP_PATH)
-	err = os.MkdirAll(_EVIDENT_TMP_PATH, 0755)
+	err := os.MkdirAll(_EVIDENT_TMP_PATH, 0755)
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
 			log.Get().Debugln("Temporary directory already exists:", _EVIDENT_TMP_PATH)
@@ -129,11 +115,7 @@ func (self *vmImageMeasurer) MeasureImage(imagePath string) (domain.ExpectedPcrD
 		}
 	}
 
-	log.Get().Debugln("Writing UKI to temporary path:", _UKI_TMP_PATH)
-	err = os.WriteFile(_UKI_TMP_PATH, dissectOutBuffer.Bytes(), 0644)
-	if err != nil {
-		return zeroOutput, fmt.Errorf("failed to write UKI to temporary path: %v", err)
-	}
+	extractUKI(imagePath, _ESP_PARTITION_NAME, _ESP_PARTITION_MOUNT_PATH, _UKI_PATH_INSIDE_IMAGE, _UKI_TMP_PATH)
 
 	log.Get().Debugln("Running:", self.systemdPcrLockCmd, "lock-uki", _UKI_TMP_PATH)
 	pcrLockCmd := exec.Command(self.systemdPcrLockCmd, "lock-uki", _UKI_TMP_PATH)
@@ -158,13 +140,7 @@ func (self *vmImageMeasurer) MeasureImage(imagePath string) (domain.ExpectedPcrD
 			Digest  string "json:\"digest\""
 		} "json:\"digests\""
 	}{
-		struct {
-			Pcr     int "json:\"pcr\""
-			Digests []struct {
-				HashAlg string "json:\"hashAlg\""
-				Digest  string "json:\"digest\""
-			} "json:\"digests\""
-		}{
+		{
 			Pcr: 4,
 			Digests: []struct {
 				HashAlg string "json:\"hashAlg\""
@@ -220,73 +196,78 @@ func (self *vmImageMeasurer) GetEquivalentCommands(imagePath string, outputFile 
 	output := strings.Builder{}
 	fmt.Fprintf(&output, "mkdir -p %s 1>/dev/null 2>&1 && ", filepath.Dir(_UKI_TMP_PATH))
 	fmt.Fprintf(&output, "sudo %s --copy-from %s %s > %s && ", self.systemdDissectCmd, imagePath, _UKI_PATH_INSIDE_IMAGE, _UKI_TMP_PATH)
-	fmt.Fprintf(&output, "%s lock-uki %s | jq '%s'", self.systemdPcrLockCmd, _UKI_TMP_PATH, jqQuery)
+	fmt.Fprintf(&output, "%s lock-uki %s", self.systemdPcrLockCmd, _UKI_TMP_PATH)
 	if outputFile != "" {
 		fmt.Fprintf(&output, " > %s", outputFile)
 	}
 	return output.String()
 }
 
-func init() {
-	// `systemd-pcrlock` outputs a json with a single field, "records", which has an array of
-	// JSON objects like this:
-	// {
-	//   "pcr": 4,
-	//   "digests": [
-	//     ...
-	//     {
-	//       "hashAlg": "sha256",
-	//       "digest": "..."
-	//     }
-	//     ...
-	//   ]
-	// }
-	// The records order is relevant, as this is supposed to replicate the tpm eventlog
-	// Therefore, we want the last record of each different PCR, and only the relevant algorithm: sha256
+func extractUKI(imagePath string, ukiPartitionName string, ukiPartitionMountedAt string, ukiPathInsideImage string, outUkiFile string) error {
+	imageFile, err := os.DirFS(filepath.Dir(imagePath)).Open(filepath.Base(imagePath))
+	if err != nil {
+		return err
+	}
 
-	jqQueryBuilder := strings.Builder{}
-	jqQueryBuilder.WriteString("[")
+	fileBackend := file.New(imageFile, true)
+	disk, err := diskfs.OpenBackend(fileBackend, diskfs.WithOpenMode(diskfs.OpenModeOption(diskfs.ReadOnly)))
+	if err != nil {
+		return err
+	}
 
-	jqQueryBuilder.WriteString(".records | ")
-	jqQueryBuilder.WriteString("group_by(.pcr) | ")
-	jqQueryBuilder.WriteString(".[] | ")
-	jqQueryBuilder.WriteString("last | ")
+	table, err := disk.GetPartitionTable()
+	if err != nil {
+		return err
+	}
 
-	jqQueryBuilder.WriteString("{ ")
-	jqQueryBuilder.WriteString("pcr: .pcr, ")
-	jqQueryBuilder.WriteString("digest: ( ")
-	jqQueryBuilder.WriteString(".digests[] | ")
-	jqQueryBuilder.WriteString("select(.hashAlg == \"sha256\").digest ")
-	jqQueryBuilder.WriteString(") ")
-	jqQueryBuilder.WriteString("} ")
+	partitions := table.GetPartitions()
+	if len(partitions) < 1 {
+		return fmt.Errorf("no partitions found in given disk image")
+	}
 
-	jqQueryBuilder.WriteString("] + [ ")
+	espPartition := -1
+	for i, partition := range partitions {
+		gptPartition, ok := partition.(*gpt.Partition)
+		if !ok {
+			continue
+		}
+		if gptPartition.Name == ukiPartitionName {
+			espPartition = i
+			break
+		}
+	}
+	if espPartition == -1 {
+		return fmt.Errorf("%s partition not found", ukiPartitionName)
+	}
 
-	// Additionally, the expected value for PCR 12 should be 0x0, because it measures overwrites to parts of
-	// the UKI sections and other addons that may change the expected behavior of the UKI.
+	fs, err := disk.GetFilesystem(espPartition + 1) // 1-indexed; 0 has special effect
+	if err != nil {
+		return err
+	}
 
-	jqQueryBuilder.WriteString("{ ")
-	jqQueryBuilder.WriteString("pcr: 12, ")
-	jqQueryBuilder.WriteString("digest: \"0000000000000000000000000000000000000000000000000000000000000000\" ")
-	jqQueryBuilder.WriteString("} ")
+	ukiRelativePath, err := filepath.Rel(ukiPartitionMountedAt, ukiPathInsideImage)
+	if err != nil {
+		return fmt.Errorf("unexcepted uki location; not under %s", ukiPartitionMountedAt)
+	}
 
-	jqQueryBuilder.WriteString("]")
+	ukiRelativePath = fmt.Sprintf("/%s", ukiRelativePath)
 
-	// The output of the jq query will be like:
-	// [
-	//   {
-	//     "pcr": 4,
-	//     "digest": "7fcf06c1c15cb8dfc6dbde0de2db285b1e66ee260575fa0d75ee6bc91157ce50"
-	//   },
-	//   {
-	//     "pcr": 11,
-	//     "digest": "3e85f29ac1df8b1643c5c97166248f53177d009ee68a77e6be20b7d7d295288e"
-	//   },
-	//   {
-	//     "pcr": 12,
-	//     "digest": "0000000000000000000000000000000000000000000000000000000000000000"
-	//   }
-	// ]
+	f, err := fs.OpenFile(ukiRelativePath, os.O_RDONLY)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
 
-	jqQuery = jqQueryBuilder.String()
+	out, err := os.Create(outUkiFile)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, f)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
