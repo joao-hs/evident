@@ -2,6 +2,10 @@ package measure
 
 import (
 	"bytes"
+	"crypto/sha1"
+	"crypto/sha256"
+	"crypto/sha512"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +16,33 @@ import (
 
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/domain"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
+)
+
+/*
+ * This code assumes the VM's UEFI where this VM image will be running on is based on OVMF, which:
+ * - First, measures into PCR4 a boot attempt with a string tag. We should only see one appearance of that measurement
+ * - Second, measures into PCR4 a separator event. Marks the transition between pre-boot and post-boot environments
+ * Both measure little to no information about the underlying running software. It's okay since the third PCR4 measurement and PCR11's measurements give us
+ * the measurements we need.
+ */
+
+var (
+	pcr4FirstMeasuredArtifact  = []byte("Calling EFI Application from Boot Option") // source: https://github.com/tianocore/edk2/blob/12f785f106216eedbedb02427255e257d506367f/OvmfPkg/Tcg/TdTcg2Dxe/TdTcg2Dxe.c#L2110-L2116
+	pcr4SecondMeasuredArtifact = []byte{0x00, 0x00, 0x00, 0x00}                     // source: https://github.com/tianocore/edk2/blob/12f785f106216eedbedb02427255e257d506367f/OvmfPkg/Tcg/TdTcg2Dxe/TdTcg2Dxe.c#L2121-L2131
+)
+
+var (
+	pcr4FirstMeasurementSha1   = sha1.Sum(pcr4FirstMeasuredArtifact)
+	pcr4FirstMeasurementSha256 = sha256.Sum256(pcr4FirstMeasuredArtifact)
+	pcr4FirstMeasurementSha384 = sha512.Sum384(pcr4FirstMeasuredArtifact)
+	pcr4FirstMeasurementSha512 = sha512.Sum512(pcr4FirstMeasuredArtifact)
+)
+
+var (
+	pcr4SecondMeasurementSha1   = sha1.Sum(pcr4SecondMeasuredArtifact)
+	pcr4SecondMeasurementSha256 = sha256.Sum256(pcr4SecondMeasuredArtifact)
+	pcr4SecondMeasurementSha384 = sha512.Sum384(pcr4SecondMeasuredArtifact)
+	pcr4SecondMeasurementSha512 = sha512.Sum512(pcr4SecondMeasuredArtifact)
 )
 
 type VMImageMeasurer interface {
@@ -71,7 +102,7 @@ func (self *vmImageMeasurer) checkRequiredExternalCommands() error {
 
 func (self *vmImageMeasurer) MeasureImage(imagePath string) (domain.ExpectedPcrDigests, error) {
 	var (
-		zeroOutput   domain.ExpectedPcrDigests
+		zeroOutput       domain.ExpectedPcrDigests
 		dissectOutBuffer bytes.Buffer
 		dissectErrBuffer bytes.Buffer
 		pcrLockOutBuffer bytes.Buffer
@@ -113,41 +144,74 @@ func (self *vmImageMeasurer) MeasureImage(imagePath string) (domain.ExpectedPcrD
 		return zeroOutput, fmt.Errorf("systemd-pcrlock command failed: %v: %s", err, pcrLockErrBuffer.String())
 	}
 
-	var pcrLockOutput struct {
-		Records []struct {
-			PCR     int `json:"pcr"`
-			Digests []struct {
-				HashAlg string `json:"hashAlg"`
-				Digest  string `json:"digest"`
-			} `json:"digests"`
-		} `json:"records"`
-	}
-
-	err = json.Unmarshal(pcrLockOutBuffer.Bytes(), &pcrLockOutput)
+	var output domain.ExpectedPcrDigests
+	err = json.Unmarshal(pcrLockOutBuffer.Bytes(), &output)
 	if err != nil {
 		return zeroOutput, err
 	}
 
-	measures := make(map[int]string)
-
-	// PCR 12 must be asserted to 0x0 since it measures UKI section overwrites and addons that may change
-	// expected behavior of the UKI.
-	measures[12] = "0000000000000000000000000000000000000000000000000000000000000000" // sha256-sized (32 bytes) hex represented
-
-	// we want the last sha256 digest for each PCR
-	for _, record := range pcrLockOutput.Records {
-		for _, digest := range record.Digests {
-			if digest.HashAlg == "sha256" {
-				measures[record.PCR] = digest.Digest
-				break
-			}
-		}
-	}
-
-	output := domain.ExpectedPcrDigests{}
-	for pcrIndex, digest := range measures {
-		output.SetDigestAtIndex(pcrIndex, digest)
-	}
+	// PCR 4 has two well known measurements before the predicted measurement given by the pcr-lock command
+	output.Records = append([]struct {
+		Pcr     int "json:\"pcr\""
+		Digests []struct {
+			HashAlg string "json:\"hashAlg\""
+			Digest  string "json:\"digest\""
+		} "json:\"digests\""
+	}{
+		struct {
+			Pcr     int "json:\"pcr\""
+			Digests []struct {
+				HashAlg string "json:\"hashAlg\""
+				Digest  string "json:\"digest\""
+			} "json:\"digests\""
+		}{
+			Pcr: 4,
+			Digests: []struct {
+				HashAlg string "json:\"hashAlg\""
+				Digest  string "json:\"digest\""
+			}{
+				{
+					HashAlg: domain.HashAlgorithm(domain.ENUM_HASH_ALGORITHM_SHA1).String(),
+					Digest:  hex.EncodeToString(pcr4FirstMeasurementSha1[:]),
+				},
+				{
+					HashAlg: domain.HashAlgorithm(domain.ENUM_HASH_ALGORITHM_SHA256).String(),
+					Digest:  hex.EncodeToString(pcr4FirstMeasurementSha256[:]),
+				},
+				{
+					HashAlg: domain.HashAlgorithm(domain.ENUM_HASH_ALGORITHM_SHA384).String(),
+					Digest:  hex.EncodeToString(pcr4FirstMeasurementSha384[:]),
+				},
+				{
+					HashAlg: domain.HashAlgorithm(domain.ENUM_HASH_ALGORITHM_SHA512).String(),
+					Digest:  hex.EncodeToString(pcr4FirstMeasurementSha512[:]),
+				},
+			},
+		}, {
+			Pcr: 4,
+			Digests: []struct {
+				HashAlg string "json:\"hashAlg\""
+				Digest  string "json:\"digest\""
+			}{
+				{
+					HashAlg: domain.HashAlgorithm(domain.ENUM_HASH_ALGORITHM_SHA1).String(),
+					Digest:  hex.EncodeToString(pcr4SecondMeasurementSha1[:]),
+				},
+				{
+					HashAlg: domain.HashAlgorithm(domain.ENUM_HASH_ALGORITHM_SHA256).String(),
+					Digest:  hex.EncodeToString(pcr4SecondMeasurementSha256[:]),
+				},
+				{
+					HashAlg: domain.HashAlgorithm(domain.ENUM_HASH_ALGORITHM_SHA384).String(),
+					Digest:  hex.EncodeToString(pcr4SecondMeasurementSha384[:]),
+				},
+				{
+					HashAlg: domain.HashAlgorithm(domain.ENUM_HASH_ALGORITHM_SHA512).String(),
+					Digest:  hex.EncodeToString(pcr4SecondMeasurementSha512[:]),
+				},
+			},
+		},
+	}, output.Records...)
 
 	return output, nil
 }

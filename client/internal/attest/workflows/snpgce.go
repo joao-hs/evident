@@ -128,6 +128,9 @@ func RunSnpGceAttestationWorkflow(ctx context.Context, client *grpc.Client, cpuC
 			ExpectedMeasurements: expectedPCRs,
 		},
 	)
+	if err != nil {
+		return err
+	}
 
 	log.Get().Infoln("SNP GCE attestation successful")
 	return nil
