@@ -1,0 +1,3 @@
+gcp_project       = "<your-project-id>"
+gce_image_base_id = "<id-for-cvm-compatible-image-with-evident-server>"
+# This example uses the default: gcp_zone, gcp_machine_type, gcp_base_count
