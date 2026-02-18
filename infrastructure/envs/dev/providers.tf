@@ -4,6 +4,9 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 7.19.0"
     }
+    evident = {
+      source = "dpss-inesc-id/evident"
+    }
   }
 }
 
@@ -12,3 +15,5 @@ provider "google" {
   region  = local.derived_region
   zone    = var.gcp_zone
 }
+
+provider "evident" {}

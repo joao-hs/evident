@@ -10,10 +10,8 @@ SERVER_TARGET_DIR := "server/target"
 IMAGE_DIR := "image"
 CLIENT_BIN := "evident"
 TESTENV_DIR := "client/test-env"
-
-# === VARS ===
-
-target := "snp_mock"
+GO_INSTALL_DIR := "~/go/bin"
+PROVIDER_MAIN_PATH := "cmd/provider/main.go"
 
 # Default recipe:
 default:
@@ -31,6 +29,12 @@ prepare-client-env: build-client
         git init && \
         git add .
     cp {{ CLIENT_DIR }}/{{ CLIENT_BIN }} {{ TESTENV_DIR }}
+
+install-provider:
+    cd {{ CLIENT_DIR }} && go build -o {{ GO_INSTALL_DIR }}/terraform-provider-evident {{ PROVIDER_MAIN_PATH }}
+
+install-client: build-client
+    cp -f {{ CLIENT_DIR }}/{{ CLIENT_BIN }} {{ GO_INSTALL_DIR }}/
 
 # === GLOBAL ===
 
