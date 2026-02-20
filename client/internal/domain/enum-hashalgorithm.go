@@ -1,6 +1,9 @@
 package domain
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 type HashAlgorithm int
 
@@ -30,14 +33,14 @@ func (self HashAlgorithm) String() string {
 	}[self]
 }
 
-func (self *HashAlgorithm) FromString(status string) HashAlgorithm {
+func (self *HashAlgorithm) FromString(str string) HashAlgorithm {
 	return map[string]HashAlgorithm{
-		_ENUM_HASH_ALGORITHM_UNKNOWN_STR: ENUM_HASH_ALGORITHM_UNKNOWN,
-		_ENUM_HASH_ALGORITHM_SHA1_STR:    ENUM_HASH_ALGORITHM_SHA1,
-		_ENUM_HASH_ALGORITHM_SHA256_STR:  ENUM_HASH_ALGORITHM_SHA256,
-		_ENUM_HASH_ALGORITHM_SHA384_STR:  ENUM_HASH_ALGORITHM_SHA384,
-		_ENUM_HASH_ALGORITHM_SHA512_STR:  ENUM_HASH_ALGORITHM_SHA512,
-	}[status]
+		strings.ToLower(_ENUM_HASH_ALGORITHM_UNKNOWN_STR): ENUM_HASH_ALGORITHM_UNKNOWN,
+		strings.ToLower(_ENUM_HASH_ALGORITHM_SHA1_STR):    ENUM_HASH_ALGORITHM_SHA1,
+		strings.ToLower(_ENUM_HASH_ALGORITHM_SHA256_STR):  ENUM_HASH_ALGORITHM_SHA256,
+		strings.ToLower(_ENUM_HASH_ALGORITHM_SHA384_STR):  ENUM_HASH_ALGORITHM_SHA384,
+		strings.ToLower(_ENUM_HASH_ALGORITHM_SHA512_STR):  ENUM_HASH_ALGORITHM_SHA512,
+	}[strings.ToLower(str)]
 }
 
 func (self HashAlgorithm) MarshalJSON() ([]byte, error) {

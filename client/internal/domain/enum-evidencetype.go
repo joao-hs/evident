@@ -1,6 +1,9 @@
 package domain
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 type EvidenceType int
 
@@ -24,12 +27,12 @@ func (self EvidenceType) String() string {
 	}[self]
 }
 
-func (self *EvidenceType) FromString(status string) EvidenceType {
+func (self *EvidenceType) FromString(str string) EvidenceType {
 	return map[string]EvidenceType{
-		_EVIDENCE_TYPE_UNKNOWN_STR:  ENUM_EVIDENCE_TYPE_UNKNOWN,
-		_EVIDENCE_TYPE_HARDWARE_STR: ENUM_EVIDENCE_TYPE_HARDWARE,
-		_EVIDENCE_TYPE_SOFTWARE_STR: ENUM_EVIDENCE_TYPE_SOFTWARE,
-	}[status]
+		strings.ToLower(_EVIDENCE_TYPE_UNKNOWN_STR):  ENUM_EVIDENCE_TYPE_UNKNOWN,
+		strings.ToLower(_EVIDENCE_TYPE_HARDWARE_STR): ENUM_EVIDENCE_TYPE_HARDWARE,
+		strings.ToLower(_EVIDENCE_TYPE_SOFTWARE_STR): ENUM_EVIDENCE_TYPE_SOFTWARE,
+	}[strings.ToLower(str)]
 }
 
 func (self EvidenceType) MarshalJSON() ([]byte, error) {

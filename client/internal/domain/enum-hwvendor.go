@@ -1,6 +1,9 @@
 package domain
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 type HardwareVendor int
 
@@ -25,13 +28,13 @@ func (self HardwareVendor) String() string {
 	}[self]
 }
 
-func (self *HardwareVendor) FromString(status string) HardwareVendor {
+func (self *HardwareVendor) FromString(str string) HardwareVendor {
 	return map[string]HardwareVendor{
-		_HARDWARE_VENDOR_UNKNOWN_STR:         ENUM_HARDWARE_VENDOR_UNKNOWN,
-		_HARDWARE_VENDOR_AMD_DEFAULT_STR:     ENUM_HARDWARE_VENDOR_AMD,
-		_HARDWARE_VENDOR_AMD_ALTERNATIVE_STR: ENUM_HARDWARE_VENDOR_AMD,
-		_HARDWARE_VENDOR_INTEL_STR:           ENUM_HARDWARE_VENDOR_INTEL,
-	}[status]
+		strings.ToLower(_HARDWARE_VENDOR_UNKNOWN_STR):         ENUM_HARDWARE_VENDOR_UNKNOWN,
+		strings.ToLower(_HARDWARE_VENDOR_AMD_DEFAULT_STR):     ENUM_HARDWARE_VENDOR_AMD,
+		strings.ToLower(_HARDWARE_VENDOR_AMD_ALTERNATIVE_STR): ENUM_HARDWARE_VENDOR_AMD,
+		strings.ToLower(_HARDWARE_VENDOR_INTEL_STR):           ENUM_HARDWARE_VENDOR_INTEL,
+	}[strings.ToLower(str)]
 }
 
 func (self HardwareVendor) MarshalJSON() ([]byte, error) {

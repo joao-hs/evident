@@ -1,6 +1,9 @@
 package domain
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 type SecureHardwarePlatform int
 
@@ -11,9 +14,12 @@ const (
 )
 
 const (
-	_SECURE_HARDWARE_PLATFORM_UNKNOWN_STR     = "Unknown secure hardware platform"
-	_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP_STR = "AMD SEV-SNP"
-	_SECURE_HARDWARE_PLATFORM_INTEL_TDX_STR   = "Intel TDX"
+	_SECURE_HARDWARE_PLATFORM_UNKNOWN_STR                   = "Unknown secure hardware platform"
+	_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP_STR               = "AMD SEV-SNP"
+	_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP_ALTERNATIVE_1_STR = "SEV-SNP"
+	_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP_ALTERNATIVE_2_STR = "SNP"
+	_SECURE_HARDWARE_PLATFORM_INTEL_TDX_STR                 = "Intel TDX"
+	_SECURE_HARDWARE_PLATFORM_INTEL_TDX_ALTERNATIVE_STR     = "TDX"
 )
 
 func (self SecureHardwarePlatform) String() string {
@@ -24,12 +30,15 @@ func (self SecureHardwarePlatform) String() string {
 	}[self]
 }
 
-func (self *SecureHardwarePlatform) FromString(status string) SecureHardwarePlatform {
+func (self *SecureHardwarePlatform) FromString(str string) SecureHardwarePlatform {
 	return map[string]SecureHardwarePlatform{
-		_SECURE_HARDWARE_PLATFORM_UNKNOWN_STR:     ENUM_SECURE_HARDWARE_PLATFORM_UNKNOWN,
-		_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP_STR: ENUM_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP,
-		_SECURE_HARDWARE_PLATFORM_INTEL_TDX_STR:   ENUM_SECURE_HARDWARE_PLATFORM_INTEL_TDX,
-	}[status]
+		strings.ToLower(_SECURE_HARDWARE_PLATFORM_UNKNOWN_STR):                   ENUM_SECURE_HARDWARE_PLATFORM_UNKNOWN,
+		strings.ToLower(_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP_STR):               ENUM_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP,
+		strings.ToLower(_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP_ALTERNATIVE_1_STR): ENUM_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP,
+		strings.ToLower(_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP_ALTERNATIVE_2_STR): ENUM_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP,
+		strings.ToLower(_SECURE_HARDWARE_PLATFORM_INTEL_TDX_STR):                 ENUM_SECURE_HARDWARE_PLATFORM_INTEL_TDX,
+		strings.ToLower(_SECURE_HARDWARE_PLATFORM_INTEL_TDX_ALTERNATIVE_STR):     ENUM_SECURE_HARDWARE_PLATFORM_INTEL_TDX,
+	}[strings.ToLower(str)]
 }
 
 func (self *SecureHardwarePlatform) HardwareVendor() HardwareVendor {

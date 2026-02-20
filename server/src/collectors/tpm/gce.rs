@@ -1,6 +1,7 @@
 use hex::ToHex;
 use log::debug;
-use p256::PublicKey;
+use nom::{IResult, bytes::complete::take};
+use p256::{PublicKey, ecdsa};
 use sha2::Sha256;
 use std::sync::{Arc, Mutex};
 use tss_esapi::{
@@ -10,7 +11,7 @@ use tss_esapi::{
         KeyHandle, NvIndexHandle, NvIndexTpmHandle, PersistentTpmHandle, SessionHandle, TpmHandle,
     },
     interface_types::{
-        algorithm::HashingAlgorithm,
+        algorithm::{HashingAlgorithm, SignatureSchemeAlgorithm},
         resource_handles::{Hierarchy, NvAuth, Provision},
     },
     structures::{
@@ -373,7 +374,7 @@ impl SoftwareEvidenceCollector for GceTpmWrapper {
         debug!(
             "Nonce length is valid: ({} bytes) {}",
             nonce.len(),
-            hex::encode(&nonce)
+            hex::encode(nonce)
         );
 
         let pcr_selection_list = PcrSelectionListBuilder::new()
@@ -392,7 +393,7 @@ impl SoftwareEvidenceCollector for GceTpmWrapper {
         })?;
         debug!("Successfully acquired lock on TPM context");
 
-        let (attest, signature) = Self::with_new_session(&mut context_guard, |context| {
+        let (attest, tpmt_signature) = Self::with_new_session(&mut context_guard, |context| {
             debug!("Starting TPM quote operation...");
             let result = context.quote(
                 self.ak_handle,
@@ -411,14 +412,84 @@ impl SoftwareEvidenceCollector for GceTpmWrapper {
         let quoted_data = attest.marshall()?;
         debug!("Attestation data marshalled into raw bytes");
 
-        let signature_bytes = signature.marshall()?;
-        debug!("Signature marshalled into raw bytes");
+        if tpmt_signature.algorithm() != SignatureSchemeAlgorithm::EcDsa {
+            debug!(
+                "Unsupported TPM signature algorithm: {:?}",
+                tpmt_signature.algorithm()
+            );
+            return Err(EvidenceCollectionError::InternalError(format!(
+                "unsupported TPM signature algorithm: {:?}",
+                tpmt_signature.algorithm()
+            )));
+        }
+
+        let tpmt_signature_bytes = tpmt_signature.marshall()?;
+        debug!("TPMT_SIGNATURE marshalled into raw bytes");
+
+        let (_, signature) = ecdsa_signature(&tpmt_signature_bytes).map_err(|e| {
+            debug!("Failed to parse TPM signature: {:?}", e);
+            EvidenceCollectionError::InternalError(
+                "(tpm:signature) failed to parse TPM signature into ECDSA format".to_string(),
+            )
+        })?;
+
+        let signature_bytes = signature.to_der().to_bytes();
 
         debug!("Software evidence collection completed successfully");
         Ok(SoftwareEvidence {
             signed_raw: quoted_data,
-            signature: signature_bytes,
+            signature: signature_bytes.to_vec(),
             cert: self.ak_certificate.clone(),
         })
     }
+}
+
+fn ecdsa_signature(input: &[u8]) -> IResult<&[u8], ecdsa::Signature> {
+    // First two bytes: Signature Algorithm ID; for ecdsa should be 0x0018
+    let (input, sig_alg_id) = take(2usize)(input)?;
+    if sig_alg_id != [0x00, 0x18] {
+        return Err(nom::Err::Error(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::Tag,
+        )));
+    }
+    // Next two bytes: Hashing Algorithm ID; for SHA256 should be 0x000B
+    let (input, hash_alg_id) = take(2usize)(input)?;
+    if hash_alg_id != [0x00, 0x0B] {
+        return Err(nom::Err::Error(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::Tag,
+        )));
+    }
+
+    // Two components (r and s) of the ECDSA signature, prefixed with two bytes each for their length
+    let (input, r_len_bytes) = take(2usize)(input)?;
+    let r_len = u16::from_be_bytes(<[u8; 2]>::try_from(r_len_bytes).map_err(|_| {
+        nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::MapRes))
+    })?) as usize;
+    let (input, r_bytes) = take(r_len)(input)?;
+
+    let (input, s_len_bytes) = take(2usize)(input)?;
+    let s_len = u16::from_be_bytes(<[u8; 2]>::try_from(s_len_bytes).map_err(|_| {
+        nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::MapRes))
+    })?) as usize;
+    let (input, s_bytes) = take(s_len)(input)?;
+
+    let r_array: [u8; 32] = r_bytes.try_into().map_err(|_| {
+        nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::MapRes))
+    })?;
+    let s_array: [u8; 32] = s_bytes.try_into().map_err(|_| {
+        nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::MapRes))
+    })?;
+    let mut signature_raw_bytes = [0u8; 64];
+    signature_raw_bytes[..32].copy_from_slice(&r_array);
+    signature_raw_bytes[32..].copy_from_slice(&s_array);
+    let signature =
+        ecdsa::Signature::from_bytes(signature_raw_bytes.as_slice().try_into().map_err(|_| {
+            nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::MapRes))
+        })?)
+        .map_err(|_| {
+            nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::MapRes))
+        })?;
+    Ok((input, signature))
 }

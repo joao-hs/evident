@@ -1,6 +1,9 @@
 package domain
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 type AMDSEVSNPModel int
 
@@ -33,15 +36,15 @@ func (self AMDSEVSNPModel) String() string {
 	}[self]
 }
 
-func (self *AMDSEVSNPModel) FromString(status string) AMDSEVSNPModel {
+func (self *AMDSEVSNPModel) FromString(str string) AMDSEVSNPModel {
 	return map[string]AMDSEVSNPModel{
-		_AMD_SEV_SNP_MODEL_UNKNOWN_STR: ENUM_AMD_SEV_SNP_MODEL_UNKNOWN,
-		_AMD_SEV_SNP_MODEL_MILAN_STR:   ENUM_AMD_SEV_SNP_MODEL_MILAN,
-		_AMD_SEV_SNP_MODEL_GENOA_STR:   ENUM_AMD_SEV_SNP_MODEL_GENOA,
-		_AMD_SEV_SNP_MODEL_BERGAMO_STR: ENUM_AMD_SEV_SNP_MODEL_BERGAMO,
-		_AMD_SEV_SNP_MODEL_SIENA_STR:   ENUM_AMD_SEV_SNP_MODEL_SIENA,
-		_AMD_SEV_SNP_MODEL_TURIN_STR:   ENUM_AMD_SEV_SNP_MODEL_TURIN,
-	}[status]
+		strings.ToLower(_AMD_SEV_SNP_MODEL_UNKNOWN_STR): ENUM_AMD_SEV_SNP_MODEL_UNKNOWN,
+		strings.ToLower(_AMD_SEV_SNP_MODEL_MILAN_STR):   ENUM_AMD_SEV_SNP_MODEL_MILAN,
+		strings.ToLower(_AMD_SEV_SNP_MODEL_GENOA_STR):   ENUM_AMD_SEV_SNP_MODEL_GENOA,
+		strings.ToLower(_AMD_SEV_SNP_MODEL_BERGAMO_STR): ENUM_AMD_SEV_SNP_MODEL_BERGAMO,
+		strings.ToLower(_AMD_SEV_SNP_MODEL_SIENA_STR):   ENUM_AMD_SEV_SNP_MODEL_SIENA,
+		strings.ToLower(_AMD_SEV_SNP_MODEL_TURIN_STR):   ENUM_AMD_SEV_SNP_MODEL_TURIN,
+	}[strings.ToLower(str)]
 }
 
 func (self AMDSEVSNPModel) MarshalJSON() ([]byte, error) {

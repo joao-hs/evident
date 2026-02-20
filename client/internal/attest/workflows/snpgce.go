@@ -107,6 +107,9 @@ func RunSnpGceAttestationWorkflow(ctx context.Context, client *grpc.Client, cpuC
 		IntermediateAkCA: getgcetrustedcertsOutput.IntermediateCACertificate,
 		RootAkCA:         getgcetrustedcertsOutput.RootCACertificate,
 	})
+	if err != nil {
+		return err
+	}
 
 	log.Get().Infoln("Verifying freshness of the software evidence")
 	_, err = verifytpmfreshness.Task(

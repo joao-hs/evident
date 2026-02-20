@@ -20,6 +20,15 @@ type Attestor interface {
 		cloudProvider domain.CloudServiceProvider,
 		expectedPCRs domain.ExpectedPcrDigests,
 	) error
+	AttestWithContext(
+		ctx context.Context,
+		targetAddr netip.Addr,
+		targetPort uint16,
+		cpuCount uint8,
+		securePlatform domain.SecureHardwarePlatform,
+		cloudProvider domain.CloudServiceProvider,
+		expectedPCRs domain.ExpectedPcrDigests,
+	) error
 }
 
 type attestor struct {
@@ -30,24 +39,29 @@ func NewAttestor() (Attestor, error) {
 }
 
 func (self *attestor) Attest(targetAddr netip.Addr, targetPort uint16, cpuCount uint8, securePlatform domain.SecureHardwarePlatform, cloudProvider domain.CloudServiceProvider, expectedPCRs domain.ExpectedPcrDigests) error {
+	ctx := context.Background()
+	return self.AttestWithContext(ctx, targetAddr, targetPort, cpuCount, securePlatform, cloudProvider, expectedPCRs)
+}
+
+func (self *attestor) AttestWithContext(ctx context.Context, targetAddr netip.Addr, targetPort uint16, cpuCount uint8, securePlatform domain.SecureHardwarePlatform, cloudProvider domain.CloudServiceProvider, expectedPCRs domain.ExpectedPcrDigests) error {
 	switch securePlatform {
 	case domain.ENUM_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP:
-		return self.attestSNP(targetAddr, targetPort, cpuCount, cloudProvider, expectedPCRs)
+		return self.attestSNP(ctx, targetAddr, targetPort, cpuCount, cloudProvider, expectedPCRs)
 	default:
 		return fmt.Errorf("unsupported secure platform: %s", securePlatform)
 	}
 }
 
-func (self *attestor) attestSNP(targetAddr netip.Addr, targetPort uint16, cpuCount uint8, cloudProvider domain.CloudServiceProvider, expectedPCRs domain.ExpectedPcrDigests) error {
+func (self *attestor) attestSNP(ctx context.Context, targetAddr netip.Addr, targetPort uint16, cpuCount uint8, cloudProvider domain.CloudServiceProvider, expectedPCRs domain.ExpectedPcrDigests) error {
 	switch cloudProvider {
 	case domain.ENUM_CLOUD_SERVICE_PROVIDER_GCP:
-		return self.attestSNPGCE(targetAddr, targetPort, cpuCount, expectedPCRs)
+		return self.attestSNPGCE(ctx, targetAddr, targetPort, cpuCount, expectedPCRs)
 	default:
 		return fmt.Errorf("unsupported cloud provider for SNP: %s", cloudProvider)
 	}
 }
 
-func (self *attestor) attestSNPGCE(targetAddr netip.Addr, targetPort uint16, cpuCount uint8, expectedPCRs domain.ExpectedPcrDigests) error {
+func (self *attestor) attestSNPGCE(ctx context.Context, targetAddr netip.Addr, targetPort uint16, cpuCount uint8, expectedPCRs domain.ExpectedPcrDigests) error {
 	cfg := config.DefaultConfig()
 
 	cfg.Addr = netip.AddrPortFrom(targetAddr, targetPort).String()
@@ -57,9 +71,6 @@ func (self *attestor) attestSNPGCE(targetAddr netip.Addr, targetPort uint16, cpu
 		return err
 	}
 	defer client.Close()
-
-	ctx := context.Background()
-	defer ctx.Done()
 
 	return workflows.RunSnpGceAttestationWorkflow(ctx, client, cpuCount, expectedPCRs)
 }

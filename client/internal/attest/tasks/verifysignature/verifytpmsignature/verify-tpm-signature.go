@@ -27,20 +27,22 @@ func Task(ctx context.Context, input Input) (Output, error) {
 
 	log.Get().Debugln("Verifying TPM quote signature certificate chain")
 	certChain := domain.NewCertChain(input.Ak)
-	log.Get().Debugf("Attestation Key (AK) certificate, valid as leaf: %s\n", hex.EncodeToString(input.Ak.Raw))
+	log.Get().Debugf("Attestation Key (AK) certificate, valid as leaf: %s", hex.EncodeToString(input.Ak.Raw))
 	if err = certChain.AddParent(input.IntermediateAkCA); err != nil {
 		return zeroOutput, err
 	}
-	log.Get().Debugf("Intermediate AK CA certificate, valid as AK's parent: %s\n", hex.EncodeToString(input.IntermediateAkCA.Raw))
+	log.Get().Debugf("Intermediate AK CA certificate, valid as AK's parent: %s", hex.EncodeToString(input.IntermediateAkCA.Raw))
 	if err = certChain.AddParent(input.RootAkCA); err != nil {
 		return zeroOutput, err
 	}
-	log.Get().Debugf("Root AK CA certificate, valid as Intermediate AK CA's parent: %s\n", hex.EncodeToString(input.RootAkCA.Raw))
+	log.Get().Debugf("Root AK CA certificate, valid as Intermediate AK CA's parent: %s", hex.EncodeToString(input.RootAkCA.Raw))
 	log.Get().Debugln("Certificate chain for TPM quote signature is valid")
 
 	signedRaw := input.SwEvidence.Raw()
 	signedRaw.SetCertChain(certChain)
 
+	log.Get().Debugf("Signature: %s", hex.EncodeToString(signedRaw.Signature()))
+	log.Get().Debugf("Signed data: %s", hex.EncodeToString(signedRaw.SignedData()))
 	log.Get().Debugln("Verifying the signature of the TPM quote")
 	ok, err := signedRaw.IsOk()
 	if err != nil {
