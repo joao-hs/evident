@@ -1,0 +1,4 @@
+[base.aws]
+region = "eu-west-1"
+bucket = "<my-bucket>"
+bucketRegionConstraint = "eu-west-1"

@@ -1,8 +1,14 @@
 locals {
   gce_vm_types = {
     base = {
-      image_id = var.gce_image_base_id
+      image_id = local.gce_image_base_id
       count    = var.gce_base_count
+    }
+  }
+  ec2_vm_types = {
+    base = {
+      image_id = var.ec2_image_base_id
+      count    = var.ec2_base_count
     }
   }
 }
@@ -21,5 +27,21 @@ module "gce_base" {
   labels = {
     vm_type = "base"
     env     = "dev"
+  }
+}
+
+module "ec2_base" {
+  source = "../../modules/ec2-simple"
+
+  name_prefix = "base"
+
+  instance_type = var.aws_instance_type
+
+  image_id  = local.ec2_vm_types.base.image_id
+  count_vms = local.ec2_vm_types.base.count
+
+  labels = {
+    vm_type = "base"
+    env = "dev"
   }
 }

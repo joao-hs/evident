@@ -1,0 +1,4 @@
+[base.gcp]
+project = "<gcp-project-id>"
+location = "europe-west3"
+bucket = "<my-bucket>"

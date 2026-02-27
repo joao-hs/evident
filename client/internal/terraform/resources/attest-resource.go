@@ -19,6 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/terraform/adapters/attest"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/terraform/utils"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/terraform/validators"
 )
 
 const (
@@ -58,7 +59,7 @@ func (a *attestResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 				Optional: true,
 				Computed: true,
 				Validators: []validator.String{
-					stringvalidator.OneOf(
+					stringvalidator.OneOfCaseInsensitive(
 						"AWS",
 						"Azure",
 						"GCP",
@@ -77,7 +78,7 @@ func (a *attestResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 				Optional: true,
 				Computed: true,
 				Validators: []validator.String{
-					stringvalidator.OneOf(
+					stringvalidator.OneOfCaseInsensitive(
 						"AMD SEV-SNP",
 						"Intel TDX",
 					),
@@ -109,11 +110,7 @@ func (a *attestResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"machine_type": schema.StringAttribute{
 				Optional: true,
 				Validators: []validator.String{
-					stringvalidator.OneOf(
-						"n2d-standard-2",
-						"n2d-standard-4",
-						// TODO: add more
-					),
+					validators.NewCSPMachineTypeValidator(),
 				},
 			},
 			"endpoints": schema.MapAttribute{
