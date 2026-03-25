@@ -7,7 +7,7 @@ locals {
   }
   ec2_vm_types = {
     base = {
-      image_id = var.ec2_image_base_id
+      image_id = data.aws_ami.base.id
       count    = var.ec2_base_count
     }
   }
@@ -42,6 +42,6 @@ module "ec2_base" {
 
   labels = {
     vm_type = "base"
-    env = "dev"
+    env     = "dev"
   }
 }

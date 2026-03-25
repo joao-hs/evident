@@ -1,7 +1,7 @@
 variable "aws_region" {
-  type = string
+  type        = string
   description = "AWS region; AMD SEV-SNP only available in \"eu-west-1\" (Ireland, Europe) and \"us-east-2\" (Ohio, US)"
-  default = "eu-west-1" 
+  default     = "eu-west-1"
 }
 
 variable "aws_instance_type" {
@@ -29,11 +29,22 @@ variable "ec2_base_count" {
 
 variable "ec2_image_base_expected_pcrs_file" {
   description = "Relative path to JSON file containing the expected PCR records for this image"
-  type = string
+  type        = string
 }
 
 locals {
+  ec2_image_base_id            = var.ec2_image_base_version_file == null ? var.ec2_image_base_id : "${var.ec2_image_base_id}-${trimspace(file("${path.module}/${var.ec2_image_base_version_file}"))}"
   ec2_image_base_expected_pcrs = file("${path.module}/${var.ec2_image_base_expected_pcrs_file}")
+}
+
+data "aws_ami" "base" {
+  most_recent = true
+  owners      = ["self"]
+
+  filter {
+    name   = "name"
+    values = [local.ec2_image_base_id]
+  }
 }
 
 
@@ -69,7 +80,6 @@ variable "gcp_machine_type" {
 variable "gce_image_base_id" {
   description = "ID of base VM image type"
   type        = string
-  default     = null
 }
 
 variable "gce_image_base_version_file" {
@@ -79,9 +89,9 @@ variable "gce_image_base_version_file" {
 }
 
 locals {
-  _gce_raw_image_version = trimspace(file("${path.module}/${var.gce_image_base_version_file}"))
+  _gce_raw_image_version    = trimspace(file("${path.module}/${var.gce_image_base_version_file}"))
   _gce_format_image_version = replace(local._gce_raw_image_version, ".", "-")
-  gce_image_base_id = var.gce_image_base_version_file != null ? "${var.gce_image_base_id}-${local._gce_format_image_version}" : var.gce_image_base_id
+  gce_image_base_id         = var.gce_image_base_version_file != null ? "${var.gce_image_base_id}-${local._gce_format_image_version}" : var.gce_image_base_id
 }
 
 variable "gce_base_count" {
@@ -92,7 +102,7 @@ variable "gce_base_count" {
 
 variable "gce_image_base_expected_pcrs_file" {
   description = "Relative path to JSON file containing the expected PCR records for this image"
-  type = string
+  type        = string
 }
 
 locals {
