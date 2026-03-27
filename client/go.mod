@@ -35,6 +35,7 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.54.0 // indirect
 	github.com/anchore/go-lzo v0.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/cloudflare/circl v1.6.2 // indirect
 	github.com/cncf/xds/go v0.0.0-20251022180443-0feb69152e9f // indirect
 	github.com/djherbis/times v1.6.0 // indirect
 	github.com/elliotwutingfeng/asciiset v0.0.0-20230602022725-51bbb787efab // indirect
@@ -88,6 +89,7 @@ require (
 
 require (
 	cloud.google.com/go/storage v1.59.2
+	github.com/ProtonMail/go-crypto v1.4.1
 	github.com/diskfs/go-diskfs v1.7.0
 	github.com/google/gce-tcb-verifier v0.3.1
 	github.com/google/uuid v1.6.0

@@ -1,0 +1,40 @@
+[package]
+name = "evident-server"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+debug = []
+request_certificate = []
+snp_ec2 = []
+snp_gce = []
+local = ["debug"]
+# add more here
+
+[dependencies]
+common-core = { workspace = true }
+env_logger = { workspace = true }
+log = { workspace = true }
+sd-notify = { workspace = true }
+tokio = { workspace = true }
+tonic = { workspace = true }
+prost = { workspace = true }
+tonic-prost = { workspace = true }
+sev = { workspace = true }
+sha2 = { workspace = true }
+generic-array = { workspace = true }
+x509-parser = { workspace = true }
+once_cell = { workspace = true }
+nom = { workspace = true }
+p256 = { workspace = true }
+p384 = { workspace = true }
+p521 = { workspace = true }
+tss-esapi = { workspace = true }
+hex = { workspace = true }
+digest = { workspace = true }
+signature = { workspace = true }
+rustls = { workspace = true }
+tokio-rustls = { workspace = true }
+tower = { workspace = true }
+hyper-util = { workspace = true }

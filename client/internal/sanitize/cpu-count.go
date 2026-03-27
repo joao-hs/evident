@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-func CpuCount(cpuCountStr string) (uint8, error) {
+func CPUCount(cpuCountStr string) (uint8, error) {
 	cpuCount, err := strconv.ParseUint(cpuCountStr, 10, 8)
 	if err != nil {
 		return 0, fmt.Errorf("invalid cpu count: %v", err)

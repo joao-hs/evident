@@ -1,0 +1,99 @@
+syntax = "proto3";
+
+package evident_protocol.v1;
+
+import "evident_protocol/v1/pubkey.proto";
+
+option go_package = "gitlab.com/dpss-inesc-id/achilles-cvm/client/pb";
+
+message Evidence {
+  bytes signed_raw = 1;
+  bytes signature = 2;
+  PublicKey signing_key = 3;
+}
+
+message EvidenceBundle {
+  TargetType target_type = 1;
+  oneof hardware_evidence {
+    Evidence snp_evidence = 2;
+    // add more hardware evidence types as needed
+  }
+  oneof software_evidence {
+    Evidence tpm_evidence = 3;
+  }
+}
+
+message SignedEvidenceBundle {
+  bytes serialized_evidence_bundle = 1;
+  bytes signature = 2;
+  PublicKey signing_key = 3;
+}
+
+message ActivateCredentialBundle {
+  bytes credential_blob = 1;
+  bytes encrypted_secret = 2;
+}
+
+message GetEvidenceRequest {
+  bytes nonce = 1;
+  optional ActivateCredentialBundle activate_credential_bundle = 2;
+}
+
+message GetAdditionalArtifactsRequest {
+  // empty
+}
+
+enum TargetType {
+  TARGET_TYPE_UNSPECIFIED = 0;
+  TARGET_TYPE_SNP_EC2 = 1;
+  TARGET_TYPE_SNP_GCE = 2;
+}
+
+message MakeCredentialInputBundle {
+  PublicKey tpm_endorsement_key = 1;
+  bytes tpm_attestation_key_name = 2; // not hashed
+}
+
+message AdditionalArtifactsBundle {
+  TargetType target_type = 1;
+  optional PublicKey instance_key = 2;
+  optional MakeCredentialInputBundle make_credential_input = 3; // necessary for proof of EK-AK co-location (not needed when AK has a certificate)
+  optional CSR instance_csr = 4; // Certificate Signing Request, PEM
+  optional Certificate grpc_server_certificate = 5; // since this is signed, it will bind to the instance key
+}
+
+message Package {
+  bytes tarball = 1; // .tar.gz file containing the package contents
+}
+
+message PackageSubmissionResult {
+  bool success = 1;
+}
+
+message SignedPackageSubmissionResult {
+  bytes serialized_package_submission_result = 1;
+  bytes signature = 2;
+  PublicKey signing_key = 3;
+}
+
+message SignedAdditionalArtifactsBundle {
+  bytes serialized_additional_artifacts_bundle = 1;
+  bytes signature = 2;
+  PublicKey signing_key = 3;
+}
+
+message SignedCertificateChain {
+  bytes serialized_certificate_chain = 1;
+  bytes signature = 2;
+  PublicKey signing_key = 3;
+}
+
+service AttesterService {
+  rpc GetAdditionalArtifacts(GetAdditionalArtifactsRequest) returns (SignedAdditionalArtifactsBundle);
+  rpc GetEvidence(GetEvidenceRequest) returns (SignedEvidenceBundle);
+}
+
+service CertificateIssuerVerifierService {
+  rpc SubmitTrustedPackage(Package) returns (SignedPackageSubmissionResult);
+  rpc RequestInstanceKeyAttestationCertificate(SignedAdditionalArtifactsBundle) returns (SignedCertificateChain);
+}

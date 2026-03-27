@@ -1,0 +1,21 @@
+[package]
+name = "evident-keygen"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+debug = []
+request_certificate = []
+snp_ec2 = []
+snp_gce = []
+local = ["debug"]
+# add more here
+
+[dependencies]
+common-core = { workspace = true }
+nix = { workspace = true }
+p384 = { workspace = true }
+rand_core = { workspace = true }
+rcgen = { workspace = true }
+time = { workspace = true }

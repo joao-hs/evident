@@ -1,13 +1,14 @@
 package grpc
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"time"
 
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/config"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 func defaultDialOptions(cfg *config.Config) []grpc.DialOption {
@@ -22,10 +23,25 @@ func defaultDialOptions(cfg *config.Config) []grpc.DialOption {
 		}),
 	}
 
-	if cfg.UseTLS {
-		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(nil)))
+	if cfg.VerifyTLS {
+		if cfg.GrpcServerCertificate != nil {
+			rootCaPool := x509.NewCertPool()
+			rootCaPool.AddCert(cfg.GrpcServerCertificate)
+
+			tlsCfg := &tls.Config{
+				MinVersion: tls.VersionTLS12,
+				RootCAs:    rootCaPool,
+			}
+			opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))
+		} else {
+			opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(nil)))
+		}
 	} else {
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		tlsCfg := &tls.Config{
+			InsecureSkipVerify: true,
+			MinVersion:         tls.VersionTLS12,
+		}
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))
 	}
 
 	return opts

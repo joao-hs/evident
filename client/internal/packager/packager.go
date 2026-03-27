@@ -99,7 +99,9 @@ func (self *packager) GetEquivalentCommands(flakePath string, variation string, 
 func (self *packager) Package(flakePath string, variation string, outputDirPath string, repoUrl string, commitHash string) error {
 	var err error
 
-	err = os.MkdirAll(outputDirPath, 0755)
+	tmpOutputDirPath := "/tmp/evident-packaging-output" + fmt.Sprintf("%d", os.Getpid())
+
+	err = os.MkdirAll(tmpOutputDirPath, 0755)
 	if err != nil {
 		if !errors.Is(err, os.ErrExist) {
 			return fmt.Errorf("failed to create temporary directory: %v", err)
@@ -110,7 +112,7 @@ func (self *packager) Package(flakePath string, variation string, outputDirPath 
 	err = self.vmImageBuilder.BuildImage(
 		flakePath,
 		variation,
-		filepath.Join(outputDirPath, "disk.raw"),
+		filepath.Join(tmpOutputDirPath, "disk.raw"),
 	)
 	if err != nil {
 		return err
@@ -118,7 +120,7 @@ func (self *packager) Package(flakePath string, variation string, outputDirPath 
 
 	// 2. measure image and write expected PCRs to outputDirPath/expected-pcrs.json
 	expectedPcrs, err := self.vmImageMeasurer.MeasureImage(
-		filepath.Join(outputDirPath, "disk.raw"),
+		filepath.Join(tmpOutputDirPath, "disk.raw"),
 	)
 	if err != nil {
 		return err
@@ -128,7 +130,7 @@ func (self *packager) Package(flakePath string, variation string, outputDirPath 
 	if err != nil {
 		return err
 	}
-	expectedPcrsFilePath := filepath.Join(outputDirPath, "expected-pcrs.json")
+	expectedPcrsFilePath := filepath.Join(tmpOutputDirPath, "expected-pcrs.json")
 	expectedPcrsFile, err := os.OpenFile(expectedPcrsFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
@@ -145,12 +147,12 @@ func (self *packager) Package(flakePath string, variation string, outputDirPath 
 		return err
 	}
 
-	imageSha256, err := getImageSha256(filepath.Join(outputDirPath, "disk.raw"))
+	imageSha256, err := getImageSha256(filepath.Join(tmpOutputDirPath, "disk.raw"))
 	if err != nil {
 		return err
 	}
 
-	imageFileInfo, err := os.Stat(filepath.Join(outputDirPath, "disk.raw"))
+	imageFileInfo, err := os.Stat(filepath.Join(tmpOutputDirPath, "disk.raw"))
 	if err != nil {
 		return err
 	}
@@ -175,7 +177,7 @@ func (self *packager) Package(flakePath string, variation string, outputDirPath 
 		return err
 	}
 
-	manifestFilePath := filepath.Join(outputDirPath, "MANIFEST.json")
+	manifestFilePath := filepath.Join(tmpOutputDirPath, "MANIFEST.json")
 	manifestFile, err := os.OpenFile(manifestFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
@@ -185,8 +187,8 @@ func (self *packager) Package(flakePath string, variation string, outputDirPath 
 		return err
 	}
 
-	// 4. sign manifest file and save the signature to outputDirPath/<signing-pub-key-id>.sig
-	signatureFilePath := filepath.Join(outputDirPath, fmt.Sprintf("%s.sig", self.keyId))
+	// 4. sign manifest file and save the signature to outputDirPath/<signing-pub-key-id>.sig.asc
+	signatureFilePath := filepath.Join(tmpOutputDirPath, fmt.Sprintf("%s.sig.asc", self.keyId))
 	signCmd := exec.Command(self.gpgCmd, "--output", signatureFilePath, "--local-user", self.keyId, "--armor", "--detach-sign", manifestFilePath)
 	var signStderr bytes.Buffer
 	signCmd.Stdin = os.Stdin
@@ -195,6 +197,28 @@ func (self *packager) Package(flakePath string, variation string, outputDirPath 
 	if err != nil {
 		return fmt.Errorf("failed to sign manifest file: %v: %s", err, signStderr.String())
 	}
+
+	/*
+	 *	{tmpOutputDirPath}/
+	 *	├── disk.raw
+	 *	├── expected-pcrs.json
+	 *	├── MANIFEST
+	 *	└── <KEY_ID>.sig.asc
+	 */
+
+	// 5. move the contents of tmpOutputDirPath and save to outputDirPath/{final-pcr-digest}.package
+
+	/*
+	 *	outputDirPath/{final-pcr-digest}.package/
+	 *	├── disk.raw
+	 *	├── expected-pcrs.json
+	 * 	├── MANIFEST
+	 *	├── <KEY_ID>.sig.asc
+	 *	└── package.tar.gz
+	 *  	├── expected-pcrs.json
+	 *  	├── MANIFEST
+	 *		└── <KEY_ID>.sig.asc
+	 */
 
 	return nil
 }

@@ -17,8 +17,8 @@ var measureCmd = &cobra.Command{
 	Args: cobra.RangeArgs(1, 2),
 
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		debugPrintFlags(cmd)
 		setupLogger(cmd)
+		debugPrintFlags(cmd)
 	},
 
 	RunE: func(cmd *cobra.Command, args []string) error {

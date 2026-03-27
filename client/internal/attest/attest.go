@@ -2,69 +2,95 @@ package attest
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"net/netip"
 
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/workflows"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/config"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/domain"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/grpc"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/packager"
+	pb "gitlab.com/dpss-inesc-id/achilles-cvm/client/pb/evident_protocol/v1"
 )
 
-type Attestor interface {
+type Verifier interface {
 	Attest(
 		targetAddr netip.Addr,
 		targetPort uint16,
-		cpuCount uint8,
-		securePlatform domain.SecureHardwarePlatform,
-		cloudProvider domain.CloudServiceProvider,
-		expectedPCRs domain.ExpectedPcrDigests,
-	) error
-	AttestWithContext(
-		ctx context.Context,
-		targetAddr netip.Addr,
-		targetPort uint16,
-		cpuCount uint8,
-		securePlatform domain.SecureHardwarePlatform,
-		cloudProvider domain.CloudServiceProvider,
-		expectedPCRs domain.ExpectedPcrDigests,
+		optCpuCount *uint8,
+		optExpectedPCRs *domain.ExpectedPcrDigests,
+		optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle,
 	) error
 }
 
-type attestor struct {
+type verifier struct {
+	ctx            context.Context
+	securePlatform domain.SecureHardwarePlatform
+	cloudProvider  domain.CloudServiceProvider
 }
 
-func NewAttestor() (Attestor, error) {
-	return &attestor{}, nil
+func NewVerifier(securePlatform domain.SecureHardwarePlatform, cloudProvider domain.CloudServiceProvider) (Verifier, error) {
+	return &verifier{
+		ctx:            context.Background(),
+		securePlatform: securePlatform,
+		cloudProvider:  cloudProvider,
+	}, nil
 }
 
-func (self *attestor) Attest(targetAddr netip.Addr, targetPort uint16, cpuCount uint8, securePlatform domain.SecureHardwarePlatform, cloudProvider domain.CloudServiceProvider, expectedPCRs domain.ExpectedPcrDigests) error {
-	ctx := context.Background()
-	return self.AttestWithContext(ctx, targetAddr, targetPort, cpuCount, securePlatform, cloudProvider, expectedPCRs)
+func NewVerifierWithContext(ctx context.Context, securePlatform domain.SecureHardwarePlatform, cloudProvider domain.CloudServiceProvider) (Verifier, error) {
+	return &verifier{
+		ctx:            ctx,
+		securePlatform: securePlatform,
+		cloudProvider:  cloudProvider,
+	}, nil
 }
 
-func (self *attestor) AttestWithContext(ctx context.Context, targetAddr netip.Addr, targetPort uint16, cpuCount uint8, securePlatform domain.SecureHardwarePlatform, cloudProvider domain.CloudServiceProvider, expectedPCRs domain.ExpectedPcrDigests) error {
-	switch securePlatform {
+func (self *verifier) Attest(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optExpectedPCRs *domain.ExpectedPcrDigests, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle) error {
+	var (
+		optPkgs packager.Packages = nil
+		err     error
+	)
+	if optExpectedPCRs == nil {
+		optPkgs, err = packager.LoadTrustedPackages()
+		if err != nil {
+			return fmt.Errorf("failed to load trusted packages: %w", err)
+		}
+	}
+
+	switch self.securePlatform {
 	case domain.ENUM_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP:
-		return self.attestSNP(ctx, targetAddr, targetPort, cpuCount, cloudProvider, expectedPCRs)
+		return self.attestSNP(targetAddr, targetPort, optCpuCount, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle)
 	default:
-		return fmt.Errorf("unsupported secure platform: %s", securePlatform)
+		return fmt.Errorf("unsupported secure platform: %s", self.securePlatform)
 	}
 }
 
-func (self *attestor) attestSNP(ctx context.Context, targetAddr netip.Addr, targetPort uint16, cpuCount uint8, cloudProvider domain.CloudServiceProvider, expectedPCRs domain.ExpectedPcrDigests) error {
-	switch cloudProvider {
+func (self *verifier) attestSNP(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optExpectedPCRs *domain.ExpectedPcrDigests, optPkgs packager.Packages, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle) error {
+	switch self.cloudProvider {
+	case domain.ENUM_CLOUD_SERVICE_PROVIDER_AWS:
+		return self.attestSNPEC2(targetAddr, targetPort, optCpuCount, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle)
 	case domain.ENUM_CLOUD_SERVICE_PROVIDER_GCP:
-		return self.attestSNPGCE(ctx, targetAddr, targetPort, cpuCount, expectedPCRs)
+		return self.attestSNPGCE(targetAddr, targetPort, optCpuCount, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle)
 	default:
-		return fmt.Errorf("unsupported cloud provider for SNP: %s", cloudProvider)
+		return fmt.Errorf("unsupported cloud provider for SNP: %s", self.cloudProvider)
 	}
 }
 
-func (self *attestor) attestSNPGCE(ctx context.Context, targetAddr netip.Addr, targetPort uint16, cpuCount uint8, expectedPCRs domain.ExpectedPcrDigests) error {
+func (self *verifier) attestSNPEC2(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optExpectedPCRs *domain.ExpectedPcrDigests, optPkgs packager.Packages, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle) error {
 	cfg := config.DefaultConfig()
 
 	cfg.Addr = netip.AddrPortFrom(targetAddr, targetPort).String()
+
+	ok, err := useGrpcServerCertificate(&cfg, optAdditionalArtifactsBundle)
+	if err != nil {
+		return fmt.Errorf("failed to use gRPC server certificate: %w", err)
+	}
+	if ok {
+		log.Get().Debugf("Using gRPC server certificate from additional artifacts bundle for TLS connection")
+	}
 
 	client, err := grpc.NewClient(&cfg)
 	if err != nil {
@@ -72,5 +98,72 @@ func (self *attestor) attestSNPGCE(ctx context.Context, targetAddr netip.Addr, t
 	}
 	defer client.Close()
 
-	return workflows.RunSnpGceAttestationWorkflow(ctx, client, cpuCount, expectedPCRs)
+	return workflows.RunSnpEc2AttestationWorkflow(self.ctx, client, optCpuCount, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle)
+}
+
+func (self *verifier) attestSNPGCE(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optExpectedPCRs *domain.ExpectedPcrDigests, optPkgs packager.Packages, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle) error {
+	cfg := config.DefaultConfig()
+
+	cfg.Addr = netip.AddrPortFrom(targetAddr, targetPort).String()
+
+	ok, err := useGrpcServerCertificate(&cfg, optAdditionalArtifactsBundle)
+	if err != nil {
+		return fmt.Errorf("failed to use gRPC server certificate: %w", err)
+	}
+	if ok {
+		log.Get().Debugf("Using gRPC server certificate from additional artifacts bundle for TLS connection")
+	}
+
+	client, err := grpc.NewClient(&cfg)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	return workflows.RunSnpGceAttestationWorkflow(self.ctx, client, optCpuCount, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle)
+}
+
+func useGrpcServerCertificate(cfg *config.Config, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle) (bool, error) {
+	if optAdditionalArtifactsBundle == nil {
+		return false, nil
+	}
+
+	grpcServerCertificate := optAdditionalArtifactsBundle.GetGrpcServerCertificate()
+	if grpcServerCertificate == nil {
+		return false, nil
+	}
+
+	if grpcServerCertificate.Type != pb.CertificateType_CERTIFICATE_TYPE_X509 {
+		return false, fmt.Errorf("unsupported gRPC server certificate type: %s", grpcServerCertificate.Type.String())
+	}
+
+	switch grpcServerCertificate.Encoding {
+	case pb.CertificateEncoding_CERTIFICATE_ENCODING_PEM:
+		block, _ := pem.Decode(grpcServerCertificate.Data)
+		if block == nil {
+			return false, fmt.Errorf("failed to parse gRPC server certificate: no PEM block found")
+		}
+
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return false, fmt.Errorf("failed to parse gRPC server certificate: %w", err)
+		}
+		if cert == nil {
+			return false, fmt.Errorf("failed to parse gRPC server certificate: no certificate found")
+		}
+		cfg.GrpcServerCertificate = cert
+	case pb.CertificateEncoding_CERTIFICATE_ENCODING_DER:
+		cert, err := x509.ParseCertificate(grpcServerCertificate.Data)
+		if err != nil {
+			return false, fmt.Errorf("failed to parse gRPC server certificate: %w", err)
+		}
+		if cert == nil {
+			return false, fmt.Errorf("failed to parse gRPC server certificate: no certificate found")
+		}
+		cfg.GrpcServerCertificate = cert
+	default:
+		return false, fmt.Errorf("unsupported gRPC server certificate encoding: %s", grpcServerCertificate.Encoding.String())
+	}
+
+	return true, nil
 }

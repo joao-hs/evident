@@ -5,24 +5,29 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/hex"
+	"fmt"
 
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/crypto"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/domain"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/grpc"
-	pb "gitlab.com/dpss-inesc-id/achilles-cvm/client/pb/remote_attestation/v1"
+	pb "gitlab.com/dpss-inesc-id/achilles-cvm/client/pb/evident_protocol/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 type Input struct {
-	Client *grpc.Client
+	Client                     *grpc.Client
+	AdditionalArtificatsBundle *pb.AdditionalArtifactsBundle
 }
 
 type Output struct {
-	Nonce      [64]byte
-	Model      domain.AMDSEVSNPModel
-	HwEvidence domain.HardwareEvidence[*domain.AmdSevSnpAttestationReport]
-	Vcek       *x509.Certificate
-	SwEvidence domain.SoftwareEvidence
-	Ak         *x509.Certificate
+	InstanceKey *pb.PublicKey
+	Nonce       [64]byte
+	Model       domain.AMDSEVSNPModel
+	HwEvidence  domain.HardwareEvidence[*domain.AmdSevSnpAttestationReport]
+	Vcek        *x509.Certificate
+	SwEvidence  domain.SoftwareEvidence
+	AkProto     *pb.PublicKey
 }
 
 func Task(ctx context.Context, input Input) (Output, error) {
@@ -33,6 +38,42 @@ func Task(ctx context.Context, input Input) (Output, error) {
 
 	client := input.Client
 
+	var additionalArtifactsBundle = input.AdditionalArtificatsBundle
+	if additionalArtifactsBundle == nil {
+		log.Get().Debugln("Requesting additional artifacts")
+		resp, err := client.GetAdditionalArtifacts(ctx, &pb.GetAdditionalArtifactsRequest{})
+		if err != nil {
+			return zeroOutput, err
+		}
+		log.Get().Debugln("Received additional artifacts")
+
+		if resp == nil {
+			return zeroOutput, fmt.Errorf("received nil response for additional artifacts")
+		}
+
+		// We do not have prior knowledge of the expected instance key; for now, we just verify the signature's validity
+		ok, err := crypto.VerifyDataSignature(resp.SerializedAdditionalArtifactsBundle, resp.Signature, resp.SigningKey)
+		if err != nil {
+			return zeroOutput, err
+		}
+		if !ok {
+			return zeroOutput, fmt.Errorf("invalid signature for additional artifacts bundle")
+		}
+
+		err = proto.Unmarshal(resp.SerializedAdditionalArtifactsBundle, additionalArtifactsBundle)
+		if err != nil {
+			return zeroOutput, err
+		}
+	}
+	// This task needs {InstanceKey} from the AdditionalArtifactsBundle;
+	instanceKey := additionalArtifactsBundle.InstanceKey
+	if instanceKey == nil {
+		return zeroOutput, fmt.Errorf("instance key is missing in the additional artifacts bundle")
+	}
+	output.InstanceKey = instanceKey
+
+	// TODO: (maybe) check if instanceKey matches signingkey from SignedAdditionalArtifactsBundle
+
 	nonce := generateRandomBytes()
 	output.Nonce = nonce
 
@@ -41,24 +82,65 @@ func Task(ctx context.Context, input Input) (Output, error) {
 	}
 
 	log.Get().Debugf("Requesting evidence with nonce %s\n", hex.EncodeToString(nonce[:]))
-	evidence, err := client.GetEvidence(ctx, req)
+	signedEvidenceBundle, err := client.GetEvidence(ctx, req)
 	if err != nil {
 		return zeroOutput, err
 	}
 	log.Get().Debugln("Received evidence")
 
-	// TODO: infer model from evidence
-	output.Model = domain.AMDSEVSNPModel(domain.ENUM_AMD_SEV_SNP_MODEL_MILAN)
+	evidenceBundleBytes := signedEvidenceBundle.SerializedEvidenceBundle
+	signature := signedEvidenceBundle.Signature
+	signingKey := signedEvidenceBundle.SigningKey
 
-	hardwareEvidence, err := domain.NewAMDSEVSNPHardwareEvidence(output.Model, evidence.Evidence.HardwareEvidence.Raw)
+	if signingKey == nil {
+		return zeroOutput, fmt.Errorf("signing key is missing in the response")
+	}
+
+	if !crypto.EqualPublicKeys(signingKey, instanceKey) {
+		return zeroOutput, fmt.Errorf("signing key in the response does not match the expected instance key")
+	}
+
+	log.Get().Debugf("Signature: %s", hex.EncodeToString(signature))
+
+	isValid, err := crypto.VerifyDataSignature(evidenceBundleBytes, signature, instanceKey)
+	if err != nil {
+		return zeroOutput, err
+	}
+	if !isValid {
+		return zeroOutput, fmt.Errorf("invalid signature for evidence bundle")
+	}
+
+	var evidence pb.EvidenceBundle
+	err = proto.Unmarshal(evidenceBundleBytes, &evidence)
 	if err != nil {
 		return zeroOutput, err
 	}
 
-	output.HwEvidence = hardwareEvidence
+	hardwareEvidenceWrapper, ok := evidence.HardwareEvidence.(*pb.EvidenceBundle_SnpEvidence)
+	if !ok || hardwareEvidenceWrapper == nil {
+		return zeroOutput, fmt.Errorf("hardware evidence is not of type SNP")
+	}
+	snpEvidenceProto := hardwareEvidenceWrapper.SnpEvidence
 
-	vcekCertBytes := make([]byte, len(evidence.Evidence.HardwareEvidence.Certificate))
-	copy(vcekCertBytes, evidence.Evidence.HardwareEvidence.Certificate)
+	// TODO: infer model from evidence
+	output.Model = domain.AMDSEVSNPModel(domain.ENUM_AMD_SEV_SNP_MODEL_MILAN)
+
+	snpEvidence, err := domain.NewAMDSEVSNPHardwareEvidence(output.Model, snpEvidenceProto)
+	if err != nil {
+		return zeroOutput, err
+	}
+
+	output.HwEvidence = snpEvidence
+
+	// TODO: better check for expected public key before parsing the certificate
+
+	vcekCertProto := snpEvidenceProto.SigningKey.GetCertificate()
+	if vcekCertProto == nil {
+		return zeroOutput, fmt.Errorf("vcek certificate is missing")
+	}
+
+	vcekCertBytes := make([]byte, len(snpEvidenceProto.SigningKey.KeyData))
+	copy(vcekCertBytes, snpEvidenceProto.SigningKey.KeyData)
 
 	vcekCert, err := x509.ParseCertificate(vcekCertBytes)
 	if err != nil {
@@ -66,19 +148,25 @@ func Task(ctx context.Context, input Input) (Output, error) {
 	}
 	output.Vcek = vcekCert
 
-	softwareEvidence, err := domain.NewTPMSoftwareEvidence(domain.CloudServiceProvider(domain.ENUM_CLOUD_SERVICE_PROVIDER_GCP), evidence.Evidence.SoftwareEvidence.SignedRaw, evidence.Evidence.SoftwareEvidence.Signature)
+	softwareEvidenceWrapper, ok := evidence.SoftwareEvidence.(*pb.EvidenceBundle_TpmEvidence)
+	if !ok || softwareEvidenceWrapper == nil {
+		return zeroOutput, fmt.Errorf("software evidence is not of type TPM")
+	}
+
+	tpmEvidenceProto := softwareEvidenceWrapper.TpmEvidence
+
+	tpmEvidence, err := domain.NewTPMSoftwareEvidence(domain.CloudServiceProvider(domain.ENUM_CLOUD_SERVICE_PROVIDER_GCP), tpmEvidenceProto.SignedRaw, tpmEvidenceProto.Signature)
 	if err != nil {
 		return zeroOutput, err
 	}
 
-	output.SwEvidence = softwareEvidence
+	output.SwEvidence = tpmEvidence
 
-	akCert, err := x509.ParseCertificate(evidence.Evidence.SoftwareEvidence.Certificate)
-	if err != nil {
-		return zeroOutput, err
+	if tpmEvidenceProto.SigningKey == nil {
+		return zeroOutput, fmt.Errorf("AK public key for TPM evidence is missing")
 	}
 
-	output.Ak = akCert
+	output.AkProto = tpmEvidenceProto.SigningKey
 
 	return output, nil
 }

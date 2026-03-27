@@ -16,8 +16,8 @@ var buildCmd = &cobra.Command{
 	Args: cobra.ExactArgs(3),
 
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		debugPrintFlags(cmd)
 		setupLogger(cmd)
+		debugPrintFlags(cmd)
 	},
 
 	RunE: func(cmd *cobra.Command, args []string) error {

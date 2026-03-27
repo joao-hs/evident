@@ -37,7 +37,7 @@ func AttestTargets(ctx context.Context, endpoints map[string]int32, cpuCount uin
 		return nil, err
 	}
 
-	attestor, err := attest.NewAttestor()
+	verifier, err := attest.NewVerifierWithContext(ctx, securePlatform, cloudProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func AttestTargets(ctx context.Context, endpoints map[string]int32, cpuCount uin
 			// ensure that wg.Wait() unblocks
 			defer wg.Done()
 
-			err := attestor.AttestWithContext(ctx, ip, port, cpuCount, securePlatform, cloudProvider, expectedPCRs)
+			err := verifier.Attest(ip, port, &cpuCount, &expectedPCRs, nil)
 
 			// ensure that this go routine will not be stuck sending to channel upon context cancellation
 			select {

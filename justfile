@@ -7,6 +7,8 @@ set shell := ["bash", "-cu"]
 CLIENT_DIR := "client"
 SERVER_DIR := "server"
 SERVER_TARGET_DIR := "server/target"
+INSTANCE_DIR := "instance"
+INSTANCE_TARGET_DIR := "instance/target"
 IMAGE_DIR := "image"
 CLIENT_BIN := "evident"
 TESTENV_DIR := "client/test-env"
@@ -24,7 +26,7 @@ prepare-client-env: build-client
     rm -rf {{ TESTENV_DIR }}
     mkdir -p {{ TESTENV_DIR }}
     cp -r {{ IMAGE_DIR }}/* {{ TESTENV_DIR }}
-    rsync -avq --exclude '{{ SERVER_TARGET_DIR }}' {{ SERVER_DIR }} {{ TESTENV_DIR }}
+    rsync -avq --exclude '{{ INSTANCE_TARGET_DIR }}' {{ INSTANCE_DIR }} {{ TESTENV_DIR }}
     cd {{ TESTENV_DIR }} && \
         git init && \
         git add .
@@ -35,6 +37,9 @@ install-provider:
 
 install-client: build-client
     cp -f {{ CLIENT_DIR }}/{{ CLIENT_BIN }} {{ GO_INSTALL_DIR }}/
+
+build-server-debug feature:
+    cd {{ SERVER_DIR }} && cargo build --features="{{ feature }}"
 
 # === GLOBAL ===
 

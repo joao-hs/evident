@@ -4,8 +4,8 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixpkgs-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
-    evident-server = {
-      url = "path:server";
+    evident-instance = {
+      url = "path:instance";
       inputs = {
         nixpkgs.follows = "nixpkgs";
       };
@@ -19,15 +19,36 @@
         "riscv64-linux"
       ];
       perSystem = { config, pkgs, ... }: {
-        packages = {
-          local-debug = pkgs.callPackage ./src {
-            platform = "qemu";
-            evidentServer = inputs.evident-server.outputs.packages.x86_64-linux.snp_mock;
-          };
+        packages =
+        let
+          mkBundle = inputs.evident-instance.apps.x86_64-linux.mkBundle;
+        in
+        {
           gce-base = pkgs.callPackage ./src {
             platform = "gce";
-            evidentServer = inputs.evident-server.outputs.packages.x86_64-linux.snp_gce;
-            # withDebug = false;
+            inherit inputs;
+            evidentInstancePackage = mkBundle {
+              mandatoryFeature = "snp_gce";
+              optionalFeatures = [
+                "debug"
+                "request_certificate"
+              ];
+              certificateIssuerEndpoint = "evident-ca.joaohs.com:5010";
+            };
+            withDebug = true;
+          };
+          ec2-base = pkgs.callPackage ./src {
+            platform = "ec2";
+            inputs = inputs;
+            evidentInstancePackage = mkBundle {
+              mandatoryFeature = "snp_ec2";
+              optionalFeatures = [
+                "debug"
+                "request_certificate"
+              ];
+              certificateIssuerEndpoint = "evident-ca.joaohs.com:5010";
+            };
+            withDebug = true;
           };
         };
       };

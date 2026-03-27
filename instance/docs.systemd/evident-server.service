@@ -1,0 +1,19 @@
+[Unit]
+Description=Evident Attester Server
+After=network-online.target nss-lookup.target evident-keygen.service
+Requires=evident-keygen.service
+Wants=network-online.target nss-lookup.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/local/bin/evident-server
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=30s
+CPUAffinity=0
+MemoryMax=256M
+User=root
+
+[Install]
+WantedBy=multi-user.target

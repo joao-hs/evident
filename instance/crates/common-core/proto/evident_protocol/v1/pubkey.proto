@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package evident_protocol.v1;
+
+option go_package = "gitlab.com/dpss-inesc-id/achilles-cvm/client/pb";
+
+enum KeyAlgorithm {
+  KEY_ALGORITHM_UNSPECIFIED = 0;
+  KEY_ALGORITHM_EC = 1;
+  KEY_ALGORITHM_RSA = 2;
+}
+
+enum EllipticCurve {
+  ELLIPTIC_CURVE_UNSPECIFIED = 0;
+  ELLIPTIC_CURVE_P256 = 1; // NIST P-256 / secp256r1
+  ELLIPTIC_CURVE_P384 = 2; // NIST P-384 / secp384r1
+  ELLIPTIC_CURVE_P521 = 3; // NIST P-521 / secp521r1
+}
+
+enum RsaKeySize {
+  RSA_KEY_SIZE_UNSPECIFIED = 0;
+  RSA_KEY_SIZE_2048 = 1;
+  RSA_KEY_SIZE_3072 = 2;
+  RSA_KEY_SIZE_4096 = 3;
+}
+
+enum KeyEncoding {
+  KEY_ENCODING_UNSPECIFIED = 0;
+  KEY_ENCODING_SPKI_DER = 1; // SubjectPublicKeyInfo DER format
+  // other encodings can be added as needed
+}
+
+enum CertificateType {
+  CERTIFICATE_TYPE_UNSPECIFIED = 0;
+  CERTIFICATE_TYPE_X509 = 1;
+}
+
+enum CertificateEncoding {
+  CERTIFICATE_ENCODING_UNSPECIFIED = 0;
+  CERTIFICATE_ENCODING_DER = 1;
+  CERTIFICATE_ENCODING_PEM = 2;
+}
+
+message Certificate {
+  CertificateType type = 1;
+  CertificateEncoding encoding = 2;
+  bytes data = 3;
+}
+
+message CertificateChain {
+  repeated Certificate certificates = 1; // [i] is issued by [i+1] - last certificate may be the root CA
+}
+
+message PublicKey {
+  KeyAlgorithm algorithm = 1;
+  oneof key_params {
+    EllipticCurve elliptic_curve = 2;
+    RsaKeySize rsa_key_size = 3;
+  }
+  KeyEncoding encoding = 4;
+  bytes key_data = 5;
+  optional Certificate certificate = 6;
+}
+
+enum CSREncoding {
+  CSR_ENCODING_UNSPECIFIED = 0;
+  CSR_ENCODING_PEM = 1;
+  // other encodings can be added as needed
+}
+
+enum CSRFormat {
+  CSR_FORMAT_UNSPECIFIED = 0;
+  CSR_FORMAT_PKCS10 = 1;
+  // other formats can be added as needed
+}
+
+message CSR {
+  CSREncoding encoding = 1;
+  CSRFormat format = 2;
+  bytes data = 3;
+}

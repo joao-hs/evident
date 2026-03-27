@@ -12,12 +12,12 @@ import (
 )
 
 var packageCmd = &cobra.Command{
-	Use:   "package [flags]",
+	Use:   "package",
 	Short: "Build VM image from Nix flake, measure it, and vouch the package's manifest file",
 
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		debugPrintFlags(cmd)
 		setupLogger(cmd)
+		debugPrintFlags(cmd)
 	},
 
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -85,7 +85,7 @@ var packageCmd = &cobra.Command{
 func init() {
 	packageCmd.Flags().String("flake", "./flake.nix", "path to the nix flake")
 	packageCmd.Flags().String("variation", "", "package variation inside the nix flake")
-	packageCmd.Flags().StringP("output-dir", "o", "./package", "output directory path where to store the built package")
+	packageCmd.Flags().StringP("output-dir", "o", "/etc/evident/trusted-packages", "output directory path where to store the built package")
 	packageCmd.Flags().String("repo", "", "git repository url to include in the manifest file")
 	packageCmd.Flags().String("commit", "", "git commit hash to include in the manifest file")
 	packageCmd.Flags().StringP("key", "k", "", "gpg key id to sign the manifest file (default gpg key if exists, otherwise aborts)")

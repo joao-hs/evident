@@ -17,7 +17,7 @@ func retryingCall[Req, Res proto.Message](
 
 	var result Res
 	var err error
-	for i := 0; i < maxRetries; i++ {
+	for range maxRetries {
 		result, err = call(ctx, req)
 		if err == nil {
 			return result, nil

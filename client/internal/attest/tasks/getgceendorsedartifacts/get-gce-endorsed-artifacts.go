@@ -27,16 +27,21 @@ const (
 )
 
 type Input struct {
-	CPUCount   uint32
+	CPUCount   *uint8
 	HwEvidence domain.HardwareEvidence[*domain.AmdSevSnpAttestationReport]
 }
 
 type Output struct {
 	OvmfBinaryBytes []byte
+	// hack: we can derive/confirm the expected CPUCount from the Google's launch endorsement; no need to reproduce the measurement for all possible CPU counts later
+	CPUCount uint8
 }
 
 func Task(ctx context.Context, input Input) (Output, error) {
-	var zeroOutput Output
+	var (
+		zeroOutput Output
+		output     Output
+	)
 
 	report := input.HwEvidence.Report()
 	var measurementBytes [48]byte
@@ -122,22 +127,50 @@ func Task(ctx context.Context, input Input) (Output, error) {
 		return zeroOutput, fmt.Errorf("google uefi launch digest measurements is nil")
 	}
 
-	googleUefiLaunchDigest := googleUefiLaunchDigestMeasurements[input.CPUCount]
-	if googleUefiLaunchDigest == nil {
-		return zeroOutput, fmt.Errorf("google uefi launch digest for cpu count %d is nil", input.CPUCount)
-	}
+	if input.CPUCount == nil {
+		found := false
+		for cpuCount, googleUefiLaunchDigest := range googleUefiLaunchDigestMeasurements {
+			if googleUefiLaunchDigest == nil {
+				log.Get().Warnf("google uefi launch digest for cpu count %d is nil, skipping\n", cpuCount)
+				continue
+			}
+			if len(googleUefiLaunchDigest) != 48 {
+				log.Get().Warnf("google uefi launch digest for cpu count %d has invalid length: %d, skipping\n", cpuCount, len(googleUefiLaunchDigest))
+				continue
+			}
 
-	if len(googleUefiLaunchDigest) != 48 {
-		return zeroOutput, fmt.Errorf("google uefi launch digest for cpu count %d has invalid length: %d", input.CPUCount, len(googleUefiLaunchDigest))
-	}
-	log.Get().Debugf("Advertised UEFI launch digest for CPU count %d in launch endorsement: %s\n", input.CPUCount, hex.EncodeToString(googleUefiLaunchDigest))
+			reportUefiLaunchDigest := report.Measurement[:]
+			if bytes.Equal(googleUefiLaunchDigest, reportUefiLaunchDigest) {
+				log.Get().Debugf("Advertised UEFI launch digest for CPU count %d in launch endorsement matches report measurement: %s\n", cpuCount, hex.EncodeToString(googleUefiLaunchDigest))
+				output.CPUCount = uint8(cpuCount)
+				found = true
+				break
+			} else {
+				log.Get().Debugf("Advertised UEFI launch digest for CPU count %d in launch endorsement does not match report measurement, skipping\n", cpuCount)
+			}
+		}
+		if !found {
+			return zeroOutput, fmt.Errorf("no advertised UEFI launch digest in launch endorsement matches report measurement")
+		}
+	} else {
+		googleUefiLaunchDigest := googleUefiLaunchDigestMeasurements[uint32(*input.CPUCount)]
+		if googleUefiLaunchDigest == nil {
+			return zeroOutput, fmt.Errorf("google uefi launch digest for cpu count %d is nil", input.CPUCount)
+		}
+		if len(googleUefiLaunchDigest) != 48 {
+			return zeroOutput, fmt.Errorf("google uefi launch digest for cpu count %d has invalid length: %d", input.CPUCount, len(googleUefiLaunchDigest))
+		}
+		log.Get().Debugf("Advertised UEFI launch digest for CPU count %d in launch endorsement: %s\n", input.CPUCount, hex.EncodeToString(googleUefiLaunchDigest))
 
-	log.Get().Debugln("Comparing advertised UEFI launch digest with actual report measurement")
-	reportUefiLaunchDigest := report.Measurement[:]
-	if !bytes.Equal(googleUefiLaunchDigest, reportUefiLaunchDigest) {
-		return zeroOutput, fmt.Errorf("uefi launch digest does not match report measurement")
+		log.Get().Debugln("Comparing advertised UEFI launch digest with actual report measurement")
+		reportUefiLaunchDigest := report.Measurement[:]
+		if !bytes.Equal(googleUefiLaunchDigest, reportUefiLaunchDigest) {
+			return zeroOutput, fmt.Errorf("uefi launch digest does not match report measurement")
+		}
+		log.Get().Debugln("Advertised UEFI launch digest matches report measurement")
+
+		output.CPUCount = *input.CPUCount
 	}
-	log.Get().Debugln("Advertised UEFI launch digest matches report measurement")
 
 	log.Get().Debugln("Getting Google's Root CA certificate for launch endorsement verification")
 	resp, err := http.Get(googleRootKeyCertUrl)
@@ -202,8 +235,7 @@ func Task(ctx context.Context, input Input) (Output, error) {
 		return zeroOutput, fmt.Errorf("calculated OVMF binary digest does not match UEFI endorsed digest")
 	}
 	log.Get().Debugln("UEFI binary integrity verified successfully")
+	output.OvmfBinaryBytes = ovmfBinaryBytes
 
-	return Output{
-		OvmfBinaryBytes: ovmfBinaryBytes,
-	}, nil
+	return output, nil
 }

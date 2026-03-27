@@ -1,9 +1,10 @@
 {
+  inputs,
   pkgs,
   lib,
   platform,
-  withDebug ? true,
-  evidentServer,
+  withDebug ? false,
+  evidentInstancePackage,
   ...
 }:
 let
@@ -26,14 +27,13 @@ in
       ./boot.nix
       ./image.nix
       ./dm-verity.nix
-      ./evident-server.nix
+      (import ./evident.nix { inherit inputs evidentInstancePackage; })
       ./networking.nix
       "${modulesPath}/image/repart.nix"
       "${modulesPath}/system/boot/uki.nix"
       ./platform-specific/${platform}.nix
     ] ++ lib.optionals withDebug [ ./debug/debug.nix ];
 
-    _module.args.evidentServer = evidentServer;
   }
 )).image.overrideAttrs
   (oldAttrs: {
