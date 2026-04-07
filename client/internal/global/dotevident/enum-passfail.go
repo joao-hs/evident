@@ -18,12 +18,12 @@ func (self passfail) String() string {
 	}[self]
 }
 
-func (self *passfail) FromString(status string) passfail {
+func (self *passfail) FromString(str string) passfail {
 	return map[string]passfail{
 		"unknown": _PASSFAIL_UNKNOWN,
 		"fail":    _PASSFAIL_FAIL,
 		"pass":    _PASSFAIL_PASS,
-	}[status]
+	}[str]
 }
 
 func (self passfail) MarshalJSON() ([]byte, error) {

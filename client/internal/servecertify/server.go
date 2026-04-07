@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/tls"
 	"crypto/x509"
+	"net"
 	"strconv"
 
 	pb "gitlab.com/dpss-inesc-id/achilles-cvm/client/pb/evident_protocol/v1"
@@ -18,7 +19,7 @@ func Serve(port int, caCert []*x509.Certificate, caKey *ecdsa.PrivateKey, tlsCon
 
 	pb.RegisterCertificateIssuerVerifierServiceServer(server, NewCertificateIssuerVerifierServiceImpl(caCert, caKey))
 
-	listener, err := tls.Listen("tcp", ":"+strconv.Itoa(port), tlsConfig)
+	listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
 	if err != nil {
 		return err
 	}

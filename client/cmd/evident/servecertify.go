@@ -57,6 +57,7 @@ var serveCertifyCmd = &cobra.Command{
 		tlsConfig := &tls.Config{
 			Certificates: []tls.Certificate{gRPCCert},
 			MinVersion:   tls.VersionTLS12,
+			NextProtos:   []string{"h2"},
 		}
 
 		cmd.SilenceUsage = true

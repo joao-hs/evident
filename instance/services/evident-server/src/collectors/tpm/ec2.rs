@@ -489,15 +489,15 @@ fn ecdsa_signature(input: &[u8]) -> IResult<&[u8], ecdsa::Signature> {
     })?) as usize;
     let (input, s_bytes) = take(s_len)(input)?;
 
-    let r_array: [u8; 32] = r_bytes.try_into().map_err(|_| {
+    let r_array: [u8; 48] = r_bytes.try_into().map_err(|_| {
         nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::MapRes))
     })?;
-    let s_array: [u8; 32] = s_bytes.try_into().map_err(|_| {
+    let s_array: [u8; 48] = s_bytes.try_into().map_err(|_| {
         nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::MapRes))
     })?;
-    let mut signature_raw_bytes = [0u8; 64];
-    signature_raw_bytes[..32].copy_from_slice(&r_array);
-    signature_raw_bytes[32..].copy_from_slice(&s_array);
+    let mut signature_raw_bytes = [0u8; 96];
+    signature_raw_bytes[..48].copy_from_slice(&r_array);
+    signature_raw_bytes[48..].copy_from_slice(&s_array);
     let signature =
         ecdsa::Signature::from_bytes(signature_raw_bytes.as_slice().into()).map_err(|_| {
             nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::MapRes))

@@ -6,8 +6,8 @@ type cloudprovider int
 
 const (
 	_CLOUDPROVIDER_UNKNOWN cloudprovider = iota
-	_CLOUDPROVIDER_EC2
 	_CLOUDPROVIDER_AVM
+	_CLOUDPROVIDER_EC2
 	_CLOUDPROVIDER_GCE
 )
 
@@ -20,13 +20,13 @@ func (self cloudprovider) String() string {
 	}[self]
 }
 
-func (self *cloudprovider) FromString(status string) cloudprovider {
+func (self *cloudprovider) FromString(str string) cloudprovider {
 	return map[string]cloudprovider{
 		"unknown_csp": _CLOUDPROVIDER_UNKNOWN,
 		"avm":         _CLOUDPROVIDER_AVM,
 		"ec2":         _CLOUDPROVIDER_EC2,
 		"gce":         _CLOUDPROVIDER_GCE,
-	}[status]
+	}[str]
 }
 
 func (self cloudprovider) MarshalJSON() ([]byte, error) {

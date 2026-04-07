@@ -24,7 +24,7 @@ func (self anchoredIn) String() string {
 	}[self]
 }
 
-func (self *anchoredIn) FromString(status string) anchoredIn {
+func (self *anchoredIn) FromString(str string) anchoredIn {
 	return map[string]anchoredIn{
 		"unknown anchoring": _ANCHOREDIN_UNKNOWN,
 		"anchored in avm":   _ANCHOREDIN_AVM,
@@ -32,7 +32,7 @@ func (self *anchoredIn) FromString(status string) anchoredIn {
 		"anchored in gce":   _ANCHOREDIN_GCE,
 		"anchored in amd":   _ANCHOREDIN_AMD,
 		"anchored in intel": _ANCHOREDIN_INTEL,
-	}[status]
+	}[str]
 }
 
 func (self anchoredIn) MarshalJSON() ([]byte, error) {

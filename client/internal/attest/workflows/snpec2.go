@@ -21,7 +21,8 @@ func RunSnpEc2AttestationWorkflow(
 ) error {
 	log.Get().Infoln("Getting evidence")
 	getSnpEvidenceOutput, err := getsnpevidence.Task(ctx, getsnpevidence.Input{
-		Client: client,
+		Client:                     client,
+		AdditionalArtificatsBundle: optAdditionalArtifactsBundle,
 	})
 	if err != nil {
 		return err

@@ -1,5 +1,6 @@
 use std::{
     fs,
+    net::IpAddr,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -25,14 +26,13 @@ use prost::Message;
 use rustls::{
     ClientConfig, DigitallySignedStruct, SignatureScheme,
     client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
-    crypto::{verify_tls12_signature, verify_tls13_signature},
     pki_types::{ServerName, UnixTime},
 };
 use signature::Verifier;
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
-use tonic::transport::{CertificateDer, ClientTlsConfig, Endpoint, Uri};
-use tower::{Service, service_fn};
+use tonic::transport::{CertificateDer, Endpoint, Uri};
+use tower::Service;
 
 use crate::{collectors, target_info::TARGET_TYPE_PROTO};
 
@@ -59,37 +59,36 @@ impl ServerCertVerifier for TemporarySkipServerVerification {
 
     fn verify_tls12_signature(
         &self,
-        _message: &[u8],
-        _cert: &CertificateDer<'_>,
-        _dss: &DigitallySignedStruct,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        Ok(HandshakeSignatureValid::assertion())
+        rustls::crypto::verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+        )
     }
 
     fn verify_tls13_signature(
         &self,
-        _message: &[u8],
-        _cert: &CertificateDer<'_>,
-        _dss: &DigitallySignedStruct,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        Ok(HandshakeSignatureValid::assertion())
+        rustls::crypto::verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+        )
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        // Advertise every scheme so the handshake is never rejected on that basis.
-        vec![
-            SignatureScheme::RSA_PKCS1_SHA256,
-            SignatureScheme::ECDSA_NISTP256_SHA256,
-            SignatureScheme::ECDSA_NISTP384_SHA384,
-            SignatureScheme::ECDSA_NISTP521_SHA512,
-            SignatureScheme::RSA_PKCS1_SHA384,
-            SignatureScheme::RSA_PKCS1_SHA512,
-            SignatureScheme::RSA_PSS_SHA256,
-            SignatureScheme::RSA_PSS_SHA384,
-            SignatureScheme::RSA_PSS_SHA512,
-            SignatureScheme::ED25519,
-            SignatureScheme::ED448,
-        ]
+        rustls::crypto::ring::default_provider()
+            .signature_verification_algorithms
+            .supported_schemes()
     }
 }
 
@@ -133,8 +132,21 @@ impl Service<Uri> for TemporarySkipVerifyTlsConnector {
 
             let tcp = TcpStream::connect(format!("{host}:{port}")).await?;
 
-            let server_name = ServerName::try_from(host.to_owned())
-                .map_err(|e| format!("invalid server name '{host}': {e}"))?;
+            let server_name = if let Ok(ip) = host.parse::<IpAddr>() {
+                match ip {
+                    std::net::IpAddr::V4(v4) => {
+                        ServerName::IpAddress(rustls::pki_types::IpAddr::V4(
+                            rustls::pki_types::Ipv4Addr::from(v4.octets()),
+                        ))
+                    }
+                    std::net::IpAddr::V6(v6) => {
+                        ServerName::IpAddress(rustls::pki_types::IpAddr::V6(v6.into()))
+                    }
+                }
+            } else {
+                ServerName::try_from(host.to_owned())
+                    .map_err(|e| format!("invalid server name '{host}': {e}"))?
+            };
 
             let tls_stream = TlsConnector::from(config).connect(server_name, tcp).await?;
 
@@ -212,7 +224,7 @@ pub async fn request_certificate(target: &str) -> Result<(), Box<dyn std::error:
         let signature = {
             let sig: Signature =
                 instance_private_key.sign(serialized_additional_artifacts_bundle.as_slice());
-            sig.to_vec()
+            sig.to_der().as_bytes().to_vec()
         };
 
         SignedAdditionalArtifactsBundle {
@@ -245,7 +257,7 @@ pub async fn request_certificate(target: &str) -> Result<(), Box<dyn std::error:
             x if x == KeyAlgorithm::Ec as i32 => match signing_key.key_params {
                 Some(KeyParams::EllipticCurve(curve)) if curve == EllipticCurve::P384.into() => {
                     let public_key = VerifyingKey::from_public_key_der(&signing_key.key_data)?;
-                    let signature = Signature::try_from(signed_cert_chain.signature.as_slice())?;
+                    let signature = Signature::from_der(signed_cert_chain.signature.as_slice())?;
                     public_key.verify(cert_chain_bytes.as_slice(), &signature)?;
                 }
                 Some(KeyParams::EllipticCurve(curve)) => {

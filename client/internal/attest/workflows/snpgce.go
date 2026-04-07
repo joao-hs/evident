@@ -135,6 +135,7 @@ func RunSnpGceAttestationWorkflow(
 		verifytpmfreshness.Input{
 			TpmEvidence: getSnpEvidenceOutput.SwEvidence,
 			Nonce:       getSnpEvidenceOutput.Nonce,
+			InstanceKey: getSnpEvidenceOutput.InstanceKey,
 		},
 	)
 	if err != nil {

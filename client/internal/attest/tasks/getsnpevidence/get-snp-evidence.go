@@ -60,6 +60,7 @@ func Task(ctx context.Context, input Input) (Output, error) {
 			return zeroOutput, fmt.Errorf("invalid signature for additional artifacts bundle")
 		}
 
+		additionalArtifactsBundle = &pb.AdditionalArtifactsBundle{}
 		err = proto.Unmarshal(resp.SerializedAdditionalArtifactsBundle, additionalArtifactsBundle)
 		if err != nil {
 			return zeroOutput, err
@@ -139,8 +140,8 @@ func Task(ctx context.Context, input Input) (Output, error) {
 		return zeroOutput, fmt.Errorf("vcek certificate is missing")
 	}
 
-	vcekCertBytes := make([]byte, len(snpEvidenceProto.SigningKey.KeyData))
-	copy(vcekCertBytes, snpEvidenceProto.SigningKey.KeyData)
+	vcekCertBytes := make([]byte, len(snpEvidenceProto.SigningKey.Certificate.Data))
+	copy(vcekCertBytes, snpEvidenceProto.SigningKey.Certificate.Data)
 
 	vcekCert, err := x509.ParseCertificate(vcekCertBytes)
 	if err != nil {

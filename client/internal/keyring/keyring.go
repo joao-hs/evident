@@ -159,7 +159,7 @@ func checkArmoredDetached(candidates openpgp.EntityList, signaturePath string, s
 	if err != nil {
 		return false, err
 	}
-	defer signatureReader.Close()
+	defer signedDataReader.Close()
 
 	_, err = openpgp.CheckArmoredDetachedSignature(
 		candidates,

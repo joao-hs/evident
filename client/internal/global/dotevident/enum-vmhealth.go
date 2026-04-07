@@ -22,14 +22,14 @@ func (self vmHealth) String() string {
 	}[self]
 }
 
-func (self *vmHealth) FromString(status string) vmHealth {
+func (self *vmHealth) FromString(str string) vmHealth {
 	return map[string]vmHealth{
 		"unknown": _VMHEALTH_UNKNOWN,
 		"pending": _VMHEALTH_PENDING,
 		"online":  _VMHEALTH_ONLINE,
 		"offline": _VMHEALTH_OFFLINE,
 		"deleted": _VMHEALTH_DELETED,
-	}[status]
+	}[str]
 }
 
 func (self vmHealth) MarshalJSON() ([]byte, error) {

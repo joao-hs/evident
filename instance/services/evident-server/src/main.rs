@@ -75,6 +75,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    #[cfg(not(feature = "request_certificate"))]
+    {
+        sd_notify::notify(false, &[sd_notify::NotifyState::Ready])?;
+    }
+
     if let Err(e) = running_server.await {
         error!("Server error: {e}");
         return Err(e.into());

@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"math/big"
 	"net"
@@ -81,7 +82,7 @@ func (c *certificateIssuerVerifierServiceImpl) RequestInstanceKeyAttestationCert
 		verifier, err = attest.NewVerifierWithContext(
 			ctx,
 			domain.SecureHardwarePlatform(domain.ENUM_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP),
-			domain.CloudServiceProvider(domain.ENUM_CLOUD_SERVICE_PROVIDER_AWS),
+			domain.CloudServiceProvider(domain.ENUM_CLOUD_SERVICE_PROVIDER_GCP),
 		)
 	default:
 		return nil, fmt.Errorf("unsupported target type: %s", target.String())
@@ -157,13 +158,18 @@ func (c *certificateIssuerVerifierServiceImpl) attestSnpGce(ctx context.Context,
 	return verifier.Attest(targetAddr, targetPort, nil, nil, additionalArtifactsBundle)
 }
 
-func (c *certificateIssuerVerifierServiceImpl) issueCertificate(csrBytes []byte) (*pb.CertificateChain, error) {
+func (c *certificateIssuerVerifierServiceImpl) issueCertificate(csrPemBytes []byte) (*pb.CertificateChain, error) {
 	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
 		return nil, err
 	}
 
-	csr, err := x509.ParseCertificateRequest(csrBytes)
+	pemBlock, _ := pem.Decode(csrPemBytes)
+	if pemBlock == nil || pemBlock.Type != "CERTIFICATE REQUEST" {
+		return nil, fmt.Errorf("failed to decode PEM block containing CSR")
+	}
+
+	csr, err := x509.ParseCertificateRequest(pemBlock.Bytes)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +201,7 @@ func (c *certificateIssuerVerifierServiceImpl) issueCertificate(csrBytes []byte)
 		return nil, err
 	}
 
-	certs := make([]*pb.Certificate, len(c.caCerts)+1)
+	certs := make([]*pb.Certificate, 0, len(c.caCerts)+1)
 	certs = append(certs, &pb.Certificate{
 		Type:     pb.CertificateType_CERTIFICATE_TYPE_X509,
 		Encoding: pb.CertificateEncoding_CERTIFICATE_ENCODING_DER,

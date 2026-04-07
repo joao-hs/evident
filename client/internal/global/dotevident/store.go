@@ -127,7 +127,7 @@ func (self *storeImpl) fileWrite(content []byte, linkPath string) (bool, error) 
 		}
 	}
 
-	err = os.Link(filepath.Join(self.storePath, existingStoreFilename), linkPath)
+	err = os.Link(filepath.Join(self.storePath, storeFilename), linkPath)
 	if err != nil {
 		return false, err
 	}

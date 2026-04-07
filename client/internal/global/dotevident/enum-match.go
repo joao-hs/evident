@@ -18,12 +18,12 @@ func (self match) String() string {
 	}[self]
 }
 
-func (self *match) FromString(status string) match {
+func (self *match) FromString(str string) match {
 	return map[string]match{
 		"unknown":  _MATCH_UNKNOWN,
 		"no-match": _MATCH_NOMATCH,
 		"match":    _MATCH_MATCH,
-	}[status]
+	}[str]
 }
 
 func (self match) MarshalJSON() ([]byte, error) {
