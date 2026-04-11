@@ -2,7 +2,7 @@ package packager
 
 import (
 	"bytes"
-	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -147,37 +147,54 @@ func (self *packager) Package(flakePath string, variation string, outputDirPath 
 		return err
 	}
 
-	imageSha256, err := getImageSha256(filepath.Join(tmpOutputDirPath, "disk.raw"))
+	nixDerivationPath, err := self.vmImageBuilder.GetDerivationPath(flakePath, variation)
 	if err != nil {
 		return err
 	}
 
-	imageFileInfo, err := os.Stat(filepath.Join(tmpOutputDirPath, "disk.raw"))
+	nixDerivationSha512, err := getFileSha512(nixDerivationPath)
+	if err != nil {
+		return err
+	}
+	nixDerivationFilename := filepath.Base(nixDerivationPath)
+	if !strings.HasSuffix(nixDerivationFilename, ".drv") {
+		return fmt.Errorf("unexpected derivation path filename: %s", nixDerivationFilename)
+	}
+	nixDerivationOutputName := strings.TrimSuffix(nixDerivationFilename, ".drv")
+	nixDerivationPathHash := nixDerivationOutputName[len("/nix/store/"):strings.Index(nixDerivationOutputName, "-")]
+	nixDerivationOutputNameOnly := nixDerivationOutputName[strings.Index(nixDerivationOutputName, "-")+1:]
+
+	imageSha512, err := getFileSha512(filepath.Join(tmpOutputDirPath, "disk.raw"))
+	if err != nil {
+		return err
+	}
+
+	imageMeasurementsSha512, err := getFileSha512(expectedPcrsFilePath)
 	if err != nil {
 		return err
 	}
 
 	manifest := domain.Manifest{
-		Version: domain.CurrentManifestVersion,
-		Source: domain.ManifestSource{
-			GitRepo:   repoUrl,
-			GitCommit: commitHash,
-		},
-		Build: domain.ManifestBuild{
-			NixVersion: nixVersion,
-			Package:    variation,
-		},
-		Image: domain.ManifestImage{
-			Digest:    imageSha256,
-			SizeBytes: int(imageFileInfo.Size()),
-		},
+		Version:                 domain.CurrentManifestVersion,
+		NixVersion:              nixVersion,
+		SourceUrl:               repoUrl,
+		SourceCommit:            commitHash,
+		FlakeAttr:               variation,
+		DrvPathHash:             nixDerivationPathHash,
+		DrvOutputName:           nixDerivationOutputNameOnly,
+		DrvSha512:               nixDerivationSha512,
+		ImageSha512:             imageSha512,
+		ImageMeasurementsSha512: imageMeasurementsSha512,
 	}
-	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
+
+	manifestBuffer := &bytes.Buffer{}
+	err = manifest.Encode(manifestBuffer)
 	if err != nil {
 		return err
 	}
+	manifestBytes := manifestBuffer.Bytes()
 
-	manifestFilePath := filepath.Join(tmpOutputDirPath, "MANIFEST.json")
+	manifestFilePath := filepath.Join(tmpOutputDirPath, "MANIFEST")
 	manifestFile, err := os.OpenFile(manifestFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
@@ -240,14 +257,14 @@ func (self *packager) getNixVersion() (string, error) {
 	return matches[1], nil
 }
 
-func getImageSha256(imagePath string) (string, error) {
+func getFileSha512(imagePath string) (string, error) {
 	diskRawFile, err := os.Open(imagePath)
 	if err != nil {
 		return "", err
 	}
 	defer diskRawFile.Close()
 
-	hash := sha256.New()
+	hash := sha512.New()
 	if _, err := io.Copy(hash, diskRawFile); err != nil {
 		return "", err
 	}

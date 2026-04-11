@@ -14,6 +14,7 @@ import (
 
 type VMImageBuilder interface {
 	BuildImage(flakePath string, variation string, imageOutputPath string) error
+	GetDerivationPath(flakePath string, variation string) (string, error)
 	GetEquivalentCommands(flakePath string, variation string, imageOutputPath string) string
 }
 
@@ -106,6 +107,29 @@ func (self *vmImageBuilder) BuildImage(flakePath string, variation string, image
 	}
 
 	return nil
+}
+
+func (self *vmImageBuilder) GetDerivationPath(flakePath string, variation string) (string, error) {
+	var (
+		err error
+	)
+
+	log.Get().Debugln("Getting derivation path for:", flakePath, variation)
+	derivationPathCmd := exec.Command(self.nixCmd, "eval", "--raw", fmt.Sprintf("%s#%s.drvPath", flakePath, variation))
+	derivationPathOut := &bytes.Buffer{}
+	derivationPathErr := &bytes.Buffer{}
+
+	derivationPathCmd.Stdout = derivationPathOut
+	derivationPathCmd.Stderr = derivationPathErr
+
+	err = derivationPathCmd.Run()
+	if err != nil {
+		return "", fmt.Errorf("nix eval failed: %s: %s", err.Error(), derivationPathErr.String())
+	}
+
+	derivationPath := strings.TrimSpace(derivationPathOut.String())
+	log.Get().Debugln("Derivation path:", derivationPath)
+	return derivationPath, nil
 }
 
 func (self *vmImageBuilder) GetEquivalentCommands(flakePath string, variation string, imageOutputPath string) string {
