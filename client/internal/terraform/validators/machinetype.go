@@ -37,7 +37,7 @@ func (c cspMachineTypeValidator) ValidateString(ctx context.Context, req validat
 		return
 	}
 
-	machineType := req.ConfigValue.ValueString();
+	machineType := req.ConfigValue.ValueString()
 	for _, validTypes := range c.validTypesByCSP {
 		if slices.Contains(validTypes, machineType) {
 			return

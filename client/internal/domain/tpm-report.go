@@ -27,8 +27,8 @@ type TpmReport struct {
 }
 
 type AttestedPcrSelectionData struct {
-	HashAlg      uint16 // SHA256 is 0x000B
-	PcrSelect    []byte // bit map of selected PCR
+	HashAlg   uint16 // SHA256 is 0x000B
+	PcrSelect []byte // bit map of selected PCR
 }
 
 func NewTpmReport(quoted []byte) (*TpmReport, error) {
