@@ -1,0 +1,193 @@
+images:
+  - location: "https://cloud.debian.org/images/cloud/forky/daily/20260409-2442/debian-14-genericcloud-amd64-daily-20260409-2442.qcow2"
+    arch: "x86_64"
+    digest: "sha512:dbc0bd07b43bc3cb2e98ae23b4314c9f57751dd3597560595e4dedd37773359b8eca3eae11be8702ef1539794f9d1b0975a1e856a324fecf05841cdc141e463c"
+  - location: "https://cloud.debian.org/images/cloud/forky/daily/20260409-2442/debian-14-genericcloud-arm64-daily-20260409-2442.qcow2"
+    arch: "aarch64"
+    digest: "sha512:bebf8275465a8cacb2f6dae36271dbf5680b7c74153b635f2d06c5afc3463494162a4859c2c559bf5f8ecd0ff93a92b651bfcc47dd4128e2c95169a6b6039b9a"
+cpus: 4
+memory: 4GiB
+disk: 50GiB
+user:
+  name: debian
+  uid: 1000
+  home: /home/debian
+mountTypesUnsupported: [9p]
+ssh:
+  forwardAgent: true
+containerd:
+  user: false
+portForwards:
+  - guestPortRange: [5000, 5010]
+    hostIP: 0.0.0.0
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -uo pipefail
+
+      apt-get update
+      # almost all build processes require:
+      apt-get install -y \
+        build-essential \
+        debian-archive-keyring \
+        uidmap \
+        curl \
+        wget \
+        git \
+        sudo \
+        pkg-config \
+        just \
+        jq \
+        rsync \
+        golang-go \
+        ca-certificates \
+        gnupg
+      echo "debian ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/debian
+
+      # INSTALLER FUNCTION DEFINITIONS
+      ## Google Cloud CLI: following https://docs.cloud.google.com/sdk/docs/install-sdk#deb
+      install_gcloud() (
+        set -e
+        apt-get install -y ca-certificates gnupg curl
+        curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --no-tty --batch --dearmor -o /usr/share/keyrings/cloud.google.gpg
+        echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee /etc/apt/sources.list.d/google-cloud-sdk.list
+        apt-get update
+        apt-get install -y google-cloud-cli
+      )
+
+      ## AWS CLI: following https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
+      install_awscli() (
+        set -e
+        apt-get install unzip
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+        # TODO: check integrity
+        unzip awscliv2.zip > /dev/null 2>&1
+        ./aws/install -i /usr/local/aws-cli -b /usr/local/bin
+        rm awscliv2.zip
+      )
+
+      ## Terraform: following https://developer.hashicorp.com/terraform/install
+      install_terraform() (
+        set -e
+        wget -O - https://apt.releases.hashicorp.com/gpg | gpg --no-tty --batch --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(grep -oP '(?<=UBUNTU_CODENAME=).*' /etc/os-release || lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
+        apt-get update
+        apt-get install -y terraform
+      )
+
+      ## OpenTofu: following https://opentofu.org/docs/intro/install/deb/
+      install_tofu() (
+        set -e
+        apt-get install -y apt-transport-https ca-certificates curl gnupg
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://get.opentofu.org/opentofu.gpg | tee /etc/apt/keyrings/opentofu.gpg >/dev/null
+        curl -fsSL https://packages.opentofu.org/opentofu/tofu/gpgkey | gpg --no-tty --batch --dearmor -o /etc/apt/keyrings/opentofu-repo.gpg >/dev/null
+        chmod a+r /etc/apt/keyrings/opentofu.gpg /etc/apt/keyrings/opentofu-repo.gpg
+
+        echo -e "deb [signed-by=/etc/apt/keyrings/opentofu.gpg,/etc/apt/keyrings/opentofu-repo.gpg] https://packages.opentofu.org/opentofu/tofu/any/ any main\ndeb-src [signed-by=/etc/apt/keyrings/opentofu.gpg,/etc/apt/keyrings/opentofu-repo.gpg] https://packages.opentofu.org/opentofu/tofu/any/ any main" | \
+          tee /etc/apt/sources.list.d/opentofu.list > /dev/null
+        chmod a+r /etc/apt/sources.list.d/opentofu.list
+
+        apt-get update
+        apt-get install -y tofu
+      )
+
+      ## systemd-pcrlock: dependency for Evident Client "measure" and "package" mode
+      install_pcrlock() (
+        apt-get install -y systemd-container # systemd-pcrlock is included in systemd-container
+        echo 'export PATH="/usr/lib/systemd:$PATH"' >> {{.Home}}/.bashrc
+      )
+
+      # CALL INSTALLER FUNCTIONS AS NEEDED
+      # If not needed, you may comment the lines
+
+      # Dependency for: Evident Client upload and deploy stages
+      if ! dpkg -s google-cloud-cli >/dev/null 2>&1; then
+        install_gcloud
+      fi
+
+      # Dependency for: Evident Client upload and deploy stages
+      if ! dpkg -s awscli >/dev/null 2>&1; then
+        install_awscli
+      fi
+
+      # Dependency for: Evident Client deploy stage (At least one between: Terraform and OpenTofu)
+      if ! dpkg -s terraform >/dev/null 2>&1; then
+        install_terraform
+      fi
+
+      # Dependency for: Evident Client deploy stage (At least one between: Terraform and OpenTofu)
+      if ! dpkg -s tofu > /dev/null 2>&1; then
+        install_tofu
+      fi
+
+      # Dependency for: Evident Client measure stage and package mode
+      if ! dpkg -s systemd-container >/dev/null 2>&1; then
+        install_pcrlock
+      fi
+
+  # Nix package manager
+  # Dependency for: Evident Client build stage and package mode
+  # If not needed, you may comment the lines
+  - mode: user
+    script: |
+      #!/bin/bash
+      set -euo pipefail
+
+      mkdir -p {{.Home}}/.config/nix
+      cat > {{.Home}}/.config/nix/nix.conf <<EOF
+      experimental-features = nix-command flakes
+      extra-platforms = x86_64-linux
+      EOF
+      sh <(curl -L https://nixos.org/nix/install) --no-daemon --nix-extra-conf-file {{.Home}}/.config/nix/nix.conf
+
+  # GPG key
+  # Dependency for: Evident Client package mode
+  # If not needed, you may comment the lines
+  - mode: user
+    script: |
+      #!/bin/bash
+
+      if ! gpg --list-secret-keys --with-colons 2>/dev/null | grep -q '^sec:'; then
+        cat > /tmp/gpg-default-key.batch <<EOF
+      %no-protection
+      Key-Type: eddsa
+      Key-Curve: Ed25519
+      Key-Usage: sign
+      Subkey-Type: ecdh
+      Subkey-Curve: Curve25519
+      Subkey-Usage: encrypt
+      Name-Real: Default VM Key
+      Name-Email: {{.User}}@{{.Hostname}}
+      Expire-Date: 0
+      %commit
+      EOF
+
+        gpg --batch --generate-key /tmp/gpg-default-key.batch
+        rm -f /tmp/gpg-default-key.batch
+      fi
+
+  # Buf: following https://buf.build/docs/cli/installation/#source
+  # Dependency for: Building Evident Client
+  # If not needed, you may comment the lines
+  - mode: user
+    script: |
+      #!/bin/bash
+      go install -p 2 github.com/bufbuild/buf/cmd/buf@v1.67.0
+
+      if ! buf --version >/dev/null 2>&1; then
+        echo 'export PATH="{{.Home}}/go/bin:$PATH"' >> {{.Home}}/.bashrc
+      fi
+
+  # Uplosi: following https://github.com/edgelesssys/uplosi
+  # Dependency for: Evident Client upload stage
+  # If not needed, you may comment the lines
+  - mode: user
+    script: |
+      #!/bin/bash
+      go install -p 2 github.com/edgelesssys/uplosi@latest
+
+      if ! uplosi --version >/dev/null 2>&1; then
+        echo 'export PATH="{{.Home}}/go/bin:$PATH"' >> {{.Home}}/.bashrc
+      fi

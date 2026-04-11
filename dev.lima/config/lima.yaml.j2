@@ -1,0 +1,9 @@
+mounts:
+  - location: "{{ project }}"
+    mountPoint: /home/debian/project
+    writable: true
+cpus: 4       # default
+memory: 4GiB  # default
+disk: 50GiB   # default
+base:
+  - ./base.yaml
