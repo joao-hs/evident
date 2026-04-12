@@ -33,6 +33,8 @@ pub const INSTANCE_PUBLIC_KEY_PATH: &str =
     concat!(public_dir!(instance_dir!()), "/instance.pub.der");
 pub const INSTANCE_CERTIFICATE_PATH: &str =
     concat!(public_dir!(instance_dir!()), "/instance.crt.pem");
+pub const INSTANCE_SELF_SIGNED_CERTIFICATE_PATH: &str =
+    concat!(public_dir!(instance_dir!()), "/instance-root.crt.pem");
 pub const INSTANCE_CERTIFICATE_SIGNING_REQUEST_PATH: &str =
     concat!(public_dir!(instance_dir!()), "/instance.csr.pem");
 

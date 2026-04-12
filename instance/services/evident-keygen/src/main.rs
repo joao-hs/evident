@@ -103,6 +103,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             csr.pem()?.as_bytes(),
             0o444,
         )?;
+
+        params.not_before = OffsetDateTime::now_utc();
+        params.not_after = params.not_before + Duration::days(3650);
+
+        let cert = params.self_signed(&instance_key)?;
+        write_file(
+            constants::INSTANCE_SELF_SIGNED_CERTIFICATE_PATH,
+            cert.pem().as_bytes(),
+            0o444,
+        )?;
     }
 
     Ok(())

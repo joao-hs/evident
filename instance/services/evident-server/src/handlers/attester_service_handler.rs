@@ -2,8 +2,8 @@ use crate::services::attester_service;
 use common_core::proto::attester_service_server::AttesterService;
 use common_core::proto::public_key::KeyParams;
 use common_core::proto::{
-    self, EllipticCurve, GetAdditionalArtifactsRequest, GetEvidenceRequest, KeyAlgorithm,
-    KeyEncoding, SignedAdditionalArtifactsBundle, SignedEvidenceBundle,
+    self, Certificate, EllipticCurve, GetAdditionalArtifactsRequest, GetEvidenceRequest,
+    KeyAlgorithm, KeyEncoding, SignedAdditionalArtifactsBundle, SignedEvidenceBundle,
 };
 use p384::ecdsa::signature::SignatureEncoding;
 use p384::{
@@ -18,6 +18,7 @@ pub struct AttesterServiceHandler {
     attester_service: attester_service::AttesterService,
     instance_public_key: PublicKey,
     instance_private_key: SigningKey,
+    instance_certificate: Certificate,
 }
 
 impl AttesterServiceHandler {
@@ -25,11 +26,13 @@ impl AttesterServiceHandler {
         attester_service: attester_service::AttesterService,
         instance_public_key: PublicKey,
         instance_private_key: SigningKey,
+        instance_certificate: Certificate,
     ) -> Self {
         Self {
             attester_service,
             instance_public_key,
             instance_private_key,
+            instance_certificate,
         }
     }
 }
@@ -67,7 +70,7 @@ impl AttesterService for AttesterServiceHandler {
                 algorithm: KeyAlgorithm::Ec.into(),
                 encoding: KeyEncoding::SpkiDer.into(),
                 key_data: public_key_der.to_vec(),
-                certificate: None,
+                certificate: Some(self.instance_certificate.clone()),
                 key_params: Some(KeyParams::EllipticCurve(EllipticCurve::P384.into())),
             }),
         }))
@@ -107,7 +110,7 @@ impl AttesterService for AttesterServiceHandler {
                 algorithm: KeyAlgorithm::Ec.into(),
                 encoding: KeyEncoding::SpkiDer.into(),
                 key_data: public_key_der.to_vec(),
-                certificate: None,
+                certificate: Some(self.instance_certificate.clone()),
                 key_params: Some(KeyParams::EllipticCurve(EllipticCurve::P384.into())),
             }),
         }))
