@@ -6,9 +6,11 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
+	stdlog "log"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/dotevident"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/terraform/provider"
 )
 
@@ -35,6 +37,19 @@ func main() {
 	err := providerserver.Serve(context.Background(), provider.New(version), opts)
 
 	if err != nil {
-		log.Fatal(err.Error())
+		stdlog.Fatal(err.Error())
 	}
+}
+
+func setupLogger(debug bool) error {
+	dot := dotevident.Get()
+	logFilePath := dot.GetLogFilePath("tf-provider")
+	err := log.GetLogFileSyncer().Swap(logFilePath)
+	if err != nil {
+		return err
+	}
+	if debug {
+		log.Get().SetDebugLevel()
+	}
+	return nil
 }

@@ -36,8 +36,8 @@ func Task(ctx context.Context, input Input) (Output, error) {
 	buffer.Write(input.Ak.Raw)
 	digest := sha512.Sum512(buffer.Bytes())
 
-	log.Get().Debugf("Computed digest: %s\n", hex.EncodeToString(digest[:]))
-	log.Get().Debugf("Report data from the hardware evidence: %s\n", hex.EncodeToString(report.ReportData[:]))
+	log.Get().Debugf("Computed digest: %s", hex.EncodeToString(digest[:]))
+	log.Get().Debugf("Report data from the hardware evidence: %s", hex.EncodeToString(report.ReportData[:]))
 
 	if digest != report.ReportData {
 		return Output{}, fmt.Errorf("nonce mismatch, hardware evidence is not fresh")

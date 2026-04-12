@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -14,12 +16,16 @@ const (
 
 type store interface {
 	// fileExists returns true if the provided link exists and points to an existing store file; otherwise, returns false.
-	fileExists(linkpath string) (bool, error)
+	// fileExists(linkpath string) (bool, error)
 	// fileRead returns the raw content of the file pointed by the provided link
-	fileRead(linkPath string) ([]byte, error)
+	// fileRead(linkPath string) ([]byte, error)
+
 	// fileWrite returns true if it created a new store file (if the store file already existed, the link to it is still
 	// created at the provided destination); otherwise, returns false
-	fileWrite(content []byte, linkPath string) (bool, error)
+	Store(content []byte) (string, error)
+
+	// StoreGrpcMessage serializes the provided gRPC message and stores it in the store, returning the path to the stored content
+	StoreGrpcMessage(msg proto.Message) (string, error)
 }
 
 type storeImpl struct {
@@ -63,74 +69,75 @@ func (s *storeImpl) findStoreFile(filename string) (string, error) {
 	return filename, nil
 }
 
-func (s *storeImpl) findFile(linkpath string) (string, error) {
-	// 1. linkpath should exist
-	_, err := os.Lstat(linkpath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
-		}
-		return "", err
-	}
+// func (s *storeImpl) findFile(linkpath string) (string, error) {
+// 	// 1. linkpath should exist
+// 	_, err := os.Lstat(linkpath)
+// 	if err != nil {
+// 		if os.IsNotExist(err) {
+// 			return "", nil
+// 		}
+// 		return "", err
+// 	}
 
-	// 2. linkpath should point to an existing store file
-	storeFileRelPath, err := os.Readlink(linkpath)
-	if err != nil {
-		return "", err
-	}
-	storeFilename := filepath.Base(storeFileRelPath)
-	storeFilename, err = s.findStoreFile(storeFilename)
-	if err != nil {
-		return "", err
-	}
+// 	// 2. linkpath should point to an existing store file
+// 	storeFileRelPath, err := os.Readlink(linkpath)
+// 	if err != nil {
+// 		return "", err
+// 	}
+// 	storeFilename := filepath.Base(storeFileRelPath)
+// 	storeFilename, err = s.findStoreFile(storeFilename)
+// 	if err != nil {
+// 		return "", err
+// 	}
 
-	return storeFilename, nil
-}
+// 	return storeFilename, nil
+// }
 
-func (s *storeImpl) fileExists(linkpath string) (bool, error) {
-	storeFilename, err := s.findFile(linkpath)
-	if err != nil {
-		return false, err
-	}
-	if storeFilename == "" {
-		return false, nil
-	}
-	return true, nil
-}
+// func (s *storeImpl) fileExists(linkpath string) (bool, error) {
+// 	storeFilename, err := s.findFile(linkpath)
+// 	if err != nil {
+// 		return false, err
+// 	}
+// 	if storeFilename == "" {
+// 		return false, nil
+// 	}
+// 	return true, nil
+// }
 
-func (s *storeImpl) fileRead(linkPath string) ([]byte, error) {
-	storeFilename, err := s.findFile(linkPath)
-	if err != nil {
-		return nil, err
-	}
-	if storeFilename == "" {
-		return nil, fmt.Errorf("link or store file does not exist %s", linkPath)
-	}
+// func (s *storeImpl) fileRead(linkPath string) ([]byte, error) {
+// 	storeFilename, err := s.findFile(linkPath)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	if storeFilename == "" {
+// 		return nil, fmt.Errorf("link or store file does not exist %s", linkPath)
+// 	}
 
-	return os.ReadFile(filepath.Join(s.storePath, storeFilename))
-}
+// 	return os.ReadFile(filepath.Join(s.storePath, storeFilename))
+// }
 
-func (s *storeImpl) fileWrite(content []byte, linkPath string) (bool, error) {
-	isNewFile := false
-
+func (s *storeImpl) Store(content []byte) (string, error) {
 	storeFilename := s.filename(content)
+	fullPath := filepath.Join(s.storePath, storeFilename)
 
 	existingStoreFilename, err := s.findStoreFile(storeFilename)
 	if err != nil {
-		return false, err
+		return "", err
 	}
 	if existingStoreFilename == "" {
-		isNewFile = true
 		err = os.WriteFile(filepath.Join(s.storePath, storeFilename), content, 0444)
 		if err != nil {
-			return false, err
+			return "", err
 		}
 	}
 
-	err = os.Link(filepath.Join(s.storePath, storeFilename), linkPath)
-	if err != nil {
-		return false, err
-	}
+	return fullPath, nil
+}
 
-	return isNewFile, nil
+func (s *storeImpl) StoreGrpcMessage(msg proto.Message) (string, error) {
+	serializedMsg, err := proto.Marshal(msg)
+	if err != nil {
+		return "", err
+	}
+	return s.Store(serializedMsg)
 }

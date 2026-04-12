@@ -35,12 +35,12 @@ func Task(ctx context.Context, input Input) (Output, error) {
 	expectedMeasurementsPtr := input.OptExpectedMeasurements
 	if input.OptExpectedMeasurements == nil {
 		finalPCRDigest := hex.EncodeToString(report.PcrDigest)
-		log.Get().Debugf("Looking for a trusted package matching the final PCR digest %s\n", finalPCRDigest)
+		log.Get().Debugf("Looking for a trusted package matching the final PCR digest %s", finalPCRDigest)
 		pkg, err := input.OptPackages.GetPackageByFinalPcrDigest(finalPCRDigest)
 		if err != nil {
 			return Output{}, fmt.Errorf("failed to find a trusted package matching the final PCR digest %s: %w", finalPCRDigest, err)
 		}
-		log.Get().Debugf("Found a trusted package matching the final PCR digest %s\n", finalPCRDigest)
+		log.Get().Debugf("Found a trusted package matching the final PCR digest %s", finalPCRDigest)
 
 		expectedMeasurementsPtr, err = pkg.GetExpectedPcrs()
 		if err != nil {
@@ -49,7 +49,7 @@ func Task(ctx context.Context, input Input) (Output, error) {
 		if expectedMeasurementsPtr == nil {
 			return Output{}, fmt.Errorf("trusted package matching the final PCR digest %s has nil expected PCR digests", finalPCRDigest)
 		}
-		log.Get().Debugf("Expected PCR digests from the trusted package matching the final PCR digest %s: %+v\n", finalPCRDigest, expectedMeasurementsPtr)
+		log.Get().Debugf("Expected PCR digests from the trusted package matching the final PCR digest %s: %+v", finalPCRDigest, expectedMeasurementsPtr)
 	}
 
 	log.Get().Debugln("Verifying the measurement from the TPM report matches the given expected measurements")
@@ -59,9 +59,9 @@ func Task(ctx context.Context, input Input) (Output, error) {
 	if err != nil {
 		return Output{}, err
 	}
-	log.Get().Debugf("Expected PCR digest derived from the given expected measurements: %s\n", expectedPcrDigest)
+	log.Get().Debugf("Expected PCR digest derived from the given expected measurements: %s", expectedPcrDigest)
 
-	log.Get().Debugf("PCR digest from TPM report: %s\n", hex.EncodeToString(report.PcrDigest))
+	log.Get().Debugf("PCR digest from TPM report: %s", hex.EncodeToString(report.PcrDigest))
 	if hex.EncodeToString(report.PcrDigest) != expectedPcrDigest {
 		return Output{}, fmt.Errorf("TPM measurement verification failed: expected PCR digest %s, got %s",
 			expectedPcrDigest, hex.EncodeToString(report.PcrDigest))

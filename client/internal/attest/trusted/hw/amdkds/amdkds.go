@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/domain"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 )
 
 const (
@@ -65,30 +66,30 @@ func (a *amdkds) FetchCRL(model domain.AMDSEVSNPModel) error {
 	url := fmt.Sprintf(base+vcekCRLURIV1Template, model.String())
 	resp, err := a.httpClient.Get(url)
 	if err != nil {
-		fmt.Printf("Error making GET request: %v\n", err)
+		log.Get().Errorf("Error making GET request: %v", err)
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.TLS.Version != tls.VersionTLS13 && resp.TLS.Version != tls.VersionTLS12 {
-		fmt.Printf("Insecure TLS version: %x\n", resp.TLS.Version)
+		log.Get().Errorf("Insecure TLS version: %x", resp.TLS.Version)
 		return fmt.Errorf("insecure TLS version: %x", resp.TLS.Version)
 	}
 
 	if resp.StatusCode != 200 {
-		fmt.Printf("Non-200 response: %d\n", resp.StatusCode)
+		log.Get().Errorf("Non-200 response: %d", resp.StatusCode)
 		return fmt.Errorf("non-200 response: %d", resp.StatusCode)
 	}
 
 	crlDer, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("Error reading response body: %v\n", err)
+		log.Get().Errorf("Error reading response body: %v", err)
 		return err
 	}
 
 	revocationList, err := x509.ParseRevocationList(crlDer)
 	if err != nil {
-		fmt.Printf("Error parsing CRL: %v\n", err)
+		log.Get().Errorf("Error parsing CRL: %v", err)
 		return err
 	}
 
@@ -110,30 +111,30 @@ func (a *amdkds) GetVCEKParentChain(model domain.AMDSEVSNPModel) ([]*x509.Certif
 	url := fmt.Sprintf(base+vcekCertChainURIV1Template, model.String())
 	resp, err := a.httpClient.Get(url)
 	if err != nil {
-		fmt.Printf("Error making GET request: %v\n", err)
+		log.Get().Errorf("Error making GET request: %v", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.TLS.Version != tls.VersionTLS13 && resp.TLS.Version != tls.VersionTLS12 {
-		fmt.Printf("Insecure TLS version: %x\n", resp.TLS.Version)
+		log.Get().Errorf("Insecure TLS version: %x", resp.TLS.Version)
 		return nil, fmt.Errorf("insecure TLS version: %x", resp.TLS.Version)
 	}
 
 	if resp.StatusCode != 200 {
-		fmt.Printf("Non-200 response: %d\n", resp.StatusCode)
+		log.Get().Errorf("Non-200 response: %d", resp.StatusCode)
 		return nil, fmt.Errorf("non-200 response: %d", resp.StatusCode)
 	}
 
 	certificatePemBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("Error reading response body: %v\n", err)
+		log.Get().Errorf("Error reading response body: %v", err)
 		return nil, err
 	}
 
 	certChain, err := parseCertificateChain(certificatePemBytes)
 	if err != nil {
-		fmt.Printf("Error parsing certificate chain: %v\n", err)
+		log.Get().Errorf("Error parsing certificate chain: %v", err)
 		return nil, err
 	}
 
@@ -230,7 +231,7 @@ func parseCertificate(derBytes []byte) (*x509.Certificate, error) {
 	}
 
 	if len(certs) > 1 {
-		fmt.Printf("Warning: multiple certificates found, using the first one\n")
+		log.Get().Warnln("Multiple certificates found, using the first one")
 	}
 	return certs[0], nil
 }

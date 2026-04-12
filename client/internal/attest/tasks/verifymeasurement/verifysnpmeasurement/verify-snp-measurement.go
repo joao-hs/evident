@@ -65,13 +65,13 @@ func Task(ctx context.Context, input Input) (Output, error) {
 	if err != nil {
 		return zeroOutput, err
 	}
-	log.Get().Debugf("Expected measurement derived from the UEFI binary: %s\n", hex.EncodeToString(ld[:]))
+	log.Get().Debugf("Expected measurement derived from the UEFI binary: %s", hex.EncodeToString(ld[:]))
 
 	report := input.SnpEvidence.Report()
 	if report == nil {
 		return zeroOutput, fmt.Errorf("SNP attestation report is nil")
 	}
-	log.Get().Debugf("Measurement from SNP attestation report: %s\n", hex.EncodeToString(report.Measurement[:]))
+	log.Get().Debugf("Measurement from SNP attestation report: %s", hex.EncodeToString(report.Measurement[:]))
 	if !bytes.Equal(ld[:], report.Measurement[:]) {
 		return zeroOutput, fmt.Errorf("measurement does not match")
 	}

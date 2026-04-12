@@ -31,14 +31,14 @@ func Task(ctx context.Context, input Input) (Output, error) {
 		return Output{}, fmt.Errorf("invalid TPM report extra data length: expected 32, got %d", len(tpmReport.ExtraData))
 	}
 	quotedNonce := [32]byte(tpmReport.ExtraData)
-	log.Get().Debugf("Quoted qualifying data: %s\n", hex.EncodeToString(quotedNonce[:]))
+	log.Get().Debugf("Quoted qualifying data: %s", hex.EncodeToString(quotedNonce[:]))
 
 	buffer := bytes.Buffer{}
 	buffer.Write(input.Nonce[:])
 	buffer.Write(input.InstanceKey.KeyData)
 
 	qualifyingData := sha256.Sum256(buffer.Bytes())
-	log.Get().Debugf("Expected quoted qualifying data: %s\n", hex.EncodeToString(qualifyingData[:]))
+	log.Get().Debugf("Expected quoted qualifying data: %s", hex.EncodeToString(qualifyingData[:]))
 	if qualifyingData != quotedNonce {
 		return Output{}, fmt.Errorf("nonce mismatch, software evidence is not fresh")
 	}

@@ -3,10 +3,11 @@ package getamdtrustedcerts
 import (
 	"context"
 	"crypto/x509"
-	"encoding/hex"
+	"fmt"
 
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/trusted/hw/amdkds"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/domain"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/dotevident"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 )
 
@@ -21,7 +22,9 @@ type Output struct {
 
 func Task(ctx context.Context, input Input) (Output, error) {
 	var (
+		dot        = dotevident.Get()
 		err        error
+		path       string
 		zeroOutput Output
 		output     Output
 	)
@@ -30,20 +33,28 @@ func Task(ctx context.Context, input Input) (Output, error) {
 
 	// TODO: infer model from report
 
-	log.Get().Debugf("Fetching AMD SEV-SNP certificates from AMD Key Distribution Service (KDS) for model %s\n", input.Model)
+	log.Get().Debugf("Fetching AMD SEV-SNP certificates from AMD Key Distribution Service (KDS) for model %s", input.Model)
 	log.Get().Debugln("Fetching AMD SEV Key (ASK) certificate from AMD KDS")
 	output.Ask, err = amdKds.GetAsk(input.Model)
 	if err != nil {
 		return zeroOutput, err
 	}
-	log.Get().Debugf("Received ASK certificate from AMD KDS: %s\n", hex.EncodeToString(output.Ask.Raw))
+	path, err = dot.Store(output.Ask.Raw)
+	if err != nil {
+		return zeroOutput, fmt.Errorf("failed to store ASK certificate: %w", err)
+	}
+	log.Get().Debugf("Stored ASK certificate with path: %s", path)
 
 	log.Get().Debugln("Fetching AMD Root Key (ARK) certificate from AMD KDS")
 	output.Ark, err = amdKds.GetArk(input.Model)
 	if err != nil {
 		return zeroOutput, err
 	}
-	log.Get().Debugf("Received ARK certificate from AMD KDS: %s\n", hex.EncodeToString(output.Ark.Raw))
+	path, err = dot.Store(output.Ark.Raw)
+	if err != nil {
+		return zeroOutput, fmt.Errorf("failed to store ARK certificate: %w", err)
+	}
+	log.Get().Debugf("Stored ARK certificate with path: %s", path)
 
 	// TODO: get VCEK
 

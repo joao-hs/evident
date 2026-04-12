@@ -3,10 +3,10 @@ package getgcetrustedcerts
 import (
 	"context"
 	"crypto/x509"
-	"encoding/hex"
 	"fmt"
 
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/trusted/sw/gcekds"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/dotevident"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 	pb "gitlab.com/dpss-inesc-id/achilles-cvm/client/pb/evident_protocol/v1"
 )
@@ -23,7 +23,9 @@ type Output struct {
 
 func Task(ctx context.Context, input Input) (Output, error) {
 	var (
+		dot        = dotevident.Get()
 		err        error
+		path       string
 		zeroOutput Output
 		output     Output
 	)
@@ -55,20 +57,34 @@ func Task(ctx context.Context, input Input) (Output, error) {
 
 	output.AKCertificate = akCert
 
+	path, err = dot.Store(output.AKCertificate.Raw)
+	if err != nil {
+		return zeroOutput, fmt.Errorf("Failed to store GCE TPM's AK certificate: %w", err)
+	}
+	log.Get().Debugf("Stored GCE TPM's AK certificate with path: %s", path)
+
 	log.Get().Debugln("Fetching GCE TPM's attestation key (AK) certificate chain from GCE Key Distribution Service (KDS)")
 	log.Get().Debugln("Fetching AK's intermediate CA certificate from GCE KDS")
 	output.IntermediateCACertificate, err = gceKds.GetIssuerCertificate(akCert)
 	if err != nil {
 		return zeroOutput, err
 	}
-	log.Get().Debugf("Received AK's intermediate CA certificate from GCE KDS: %s\n", hex.EncodeToString(output.IntermediateCACertificate.Raw))
+	path, err = dot.Store(output.IntermediateCACertificate.Raw)
+	if err != nil {
+		return zeroOutput, fmt.Errorf("Failed to store GCE TPM's AK intermediate CA certificate: %w", err)
+	}
+	log.Get().Debugf("Stored AK's intermediate CA certificate with path: %s", path)
 
 	log.Get().Debugln("Fetching AK's root CA certificate from GCE KDS")
 	output.RootCACertificate, err = gceKds.GetIssuerCertificate(output.IntermediateCACertificate)
 	if err != nil {
 		return zeroOutput, err
 	}
-	log.Get().Debugf("Received AK's root CA certificate from GCE KDS: %s\n", hex.EncodeToString(output.RootCACertificate.Raw))
+	path, err = dot.Store(output.RootCACertificate.Raw)
+	if err != nil {
+		return zeroOutput, fmt.Errorf("Failed to store GCE TPM's AK root CA certificate: %w", err)
+	}
+	log.Get().Debugf("Stored AK's root CA certificate with path: %s", path)
 
 	return output, nil
 }

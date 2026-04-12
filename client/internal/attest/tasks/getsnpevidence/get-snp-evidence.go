@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/x509"
-	"encoding/hex"
 	"fmt"
 
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/crypto"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/domain"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/dotevident"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/grpc"
 	pb "gitlab.com/dpss-inesc-id/achilles-cvm/client/pb/evident_protocol/v1"
@@ -32,8 +32,11 @@ type Output struct {
 
 func Task(ctx context.Context, input Input) (Output, error) {
 	var (
+		dot        = dotevident.Get()
+		path       string
 		zeroOutput Output
 		output     Output
+		err        error
 	)
 
 	client := input.Client
@@ -45,11 +48,15 @@ func Task(ctx context.Context, input Input) (Output, error) {
 		if err != nil {
 			return zeroOutput, err
 		}
-		log.Get().Debugln("Received additional artifacts")
-
 		if resp == nil {
 			return zeroOutput, fmt.Errorf("received nil response for additional artifacts")
 		}
+
+		path, err = dot.StoreGrpcMessage(resp)
+		if err != nil {
+			return zeroOutput, fmt.Errorf("failed to store signed additional artifacts response: %w", err)
+		}
+		log.Get().Debugf("Signed additional artifacts response stored with path: %s", path)
 
 		// We do not have prior knowledge of the expected instance key; for now, we just verify the signature's validity
 		ok, err := crypto.VerifyDataSignature(resp.SerializedAdditionalArtifactsBundle, resp.Signature, resp.SigningKey)
@@ -65,6 +72,11 @@ func Task(ctx context.Context, input Input) (Output, error) {
 		if err != nil {
 			return zeroOutput, err
 		}
+		path, err = dot.StoreGrpcMessage(additionalArtifactsBundle)
+		if err != nil {
+			return zeroOutput, fmt.Errorf("failed to store additional artifacts bundle: %w", err)
+		}
+		log.Get().Debugf("Additional artifacts bundle stored with path: %s", path)
 	}
 	// This task needs {InstanceKey} from the AdditionalArtifactsBundle;
 	instanceKey := additionalArtifactsBundle.InstanceKey
@@ -78,16 +90,30 @@ func Task(ctx context.Context, input Input) (Output, error) {
 	nonce := generateRandomBytes()
 	output.Nonce = nonce
 
+	path, err = dot.Store(nonce[:])
+	if err != nil {
+		return zeroOutput, fmt.Errorf("failed to store nonce: %w", err)
+	}
+	log.Get().Debugf("Nonce stored with path: %s", path)
+
 	req := &pb.GetEvidenceRequest{
 		Nonce: nonce[:],
 	}
 
-	log.Get().Debugf("Requesting evidence with nonce %s\n", hex.EncodeToString(nonce[:]))
+	log.Get().Debugf("Requesting evidence")
 	signedEvidenceBundle, err := client.GetEvidence(ctx, req)
 	if err != nil {
 		return zeroOutput, err
 	}
-	log.Get().Debugln("Received evidence")
+	if signedEvidenceBundle == nil {
+		return zeroOutput, fmt.Errorf("received nil response for evidence bundle")
+	}
+
+	path, err = dot.StoreGrpcMessage(signedEvidenceBundle)
+	if err != nil {
+		return zeroOutput, fmt.Errorf("failed to store signed evidence bundle response: %w", err)
+	}
+	log.Get().Debugf("Signed evidence bundle response stored with path: %s", path)
 
 	evidenceBundleBytes := signedEvidenceBundle.SerializedEvidenceBundle
 	signature := signedEvidenceBundle.Signature
@@ -100,8 +126,6 @@ func Task(ctx context.Context, input Input) (Output, error) {
 	if !crypto.EqualPublicKeys(signingKey, instanceKey) {
 		return zeroOutput, fmt.Errorf("signing key in the response does not match the expected instance key")
 	}
-
-	log.Get().Debugf("Signature: %s", hex.EncodeToString(signature))
 
 	isValid, err := crypto.VerifyDataSignature(evidenceBundleBytes, signature, instanceKey)
 	if err != nil {
@@ -116,6 +140,12 @@ func Task(ctx context.Context, input Input) (Output, error) {
 	if err != nil {
 		return zeroOutput, err
 	}
+
+	path, err = dot.StoreGrpcMessage(&evidence)
+	if err != nil {
+		return zeroOutput, fmt.Errorf("failed to store evidence bundle: %w", err)
+	}
+	log.Get().Debugf("Evidence bundle stored with path: %s", path)
 
 	hardwareEvidenceWrapper, ok := evidence.HardwareEvidence.(*pb.EvidenceBundle_SnpEvidence)
 	if !ok || hardwareEvidenceWrapper == nil {
@@ -133,6 +163,12 @@ func Task(ctx context.Context, input Input) (Output, error) {
 
 	output.HwEvidence = snpEvidence
 
+	path, err = dot.Store(snpEvidence.Raw().Bytes())
+	if err != nil {
+		return zeroOutput, fmt.Errorf("failed to store raw hardware evidence: %w", err)
+	}
+	log.Get().Debugf("Raw hardware evidence stored with path: %s", path)
+
 	// TODO: better check for expected public key before parsing the certificate
 
 	vcekCertProto := snpEvidenceProto.SigningKey.GetCertificate()
@@ -142,6 +178,12 @@ func Task(ctx context.Context, input Input) (Output, error) {
 
 	vcekCertBytes := make([]byte, len(snpEvidenceProto.SigningKey.Certificate.Data))
 	copy(vcekCertBytes, snpEvidenceProto.SigningKey.Certificate.Data)
+
+	path, err = dot.Store(vcekCertBytes)
+	if err != nil {
+		return zeroOutput, fmt.Errorf("failed to store VCEK certificate bytes: %w", err)
+	}
+	log.Get().Debugf("VCEK certificate bytes stored with path: %s", path)
 
 	vcekCert, err := x509.ParseCertificate(vcekCertBytes)
 	if err != nil {
@@ -162,6 +204,12 @@ func Task(ctx context.Context, input Input) (Output, error) {
 	}
 
 	output.SwEvidence = tpmEvidence
+
+	path, err = dot.Store(tpmEvidence.Raw().Bytes())
+	if err != nil {
+		return zeroOutput, fmt.Errorf("failed to store raw TPM software evidence: %w", err)
+	}
+	log.Get().Debugf("Raw TPM software evidence stored with path: %s", path)
 
 	if tpmEvidenceProto.SigningKey == nil {
 		return zeroOutput, fmt.Errorf("AK public key for TPM evidence is missing")

@@ -12,6 +12,8 @@ type SignedRaw interface {
 	SignedData() []byte
 	// Returns the signature bytes (ASN.1 encoded)
 	Signature() []byte
+	// Returns the concatenation of signed data and signature (for storage or transmission)
+	Bytes() []byte
 	// Returns the certificate chain of the signing key
 	CertChain() *CertChain
 	// Sets the certificate chain of the signing key
@@ -21,7 +23,6 @@ type SignedRaw interface {
 }
 
 type signedRaw struct {
-	raw        []byte
 	algorithm  x509.SignatureAlgorithm
 	signedData []byte
 	signature  []byte
@@ -48,6 +49,14 @@ func (sr *signedRaw) SignedData() []byte {
 
 func (sr *signedRaw) Signature() []byte {
 	return sr.signature
+}
+
+func (sr *signedRaw) Bytes() []byte {
+	// signedData || signature
+	result := make([]byte, len(sr.signedData)+len(sr.signature))
+	copy(result, sr.signedData)
+	copy(result[len(sr.signedData):], sr.signature)
+	return result
 }
 
 func (sr *signedRaw) CertChain() *CertChain {

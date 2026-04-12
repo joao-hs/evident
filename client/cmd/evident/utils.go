@@ -18,7 +18,7 @@ func debugPrintFlags(cmd *cobra.Command) {
 	if val {
 		cmd.Flags().Visit(func(f *pflag.Flag) {
 			if f.Changed {
-				log.Get().Debugf("flag \"%s\" = %s\n", f.Name, f.Value.String())
+				log.Get().Debugf("flag \"%s\" = %s", f.Name, f.Value.String())
 			}
 		})
 	}
@@ -27,12 +27,18 @@ func debugPrintFlags(cmd *cobra.Command) {
 func setupLogger(cmd *cobra.Command) error {
 	dot := dotevident.Get()
 	logFilePath := dot.GetLogFilePath(cmd.Name())
-	log.GetLogFileSyncer().Swap(logFilePath)
+	err := log.GetLogFileSyncer().Swap(logFilePath)
+	if err != nil {
+		return err
+	}
 	val, err := cmd.Flags().GetBool("debug")
+	if err != nil {
+		return fmt.Errorf("could not access debug flag: %v", err)
+	}
 	if val {
 		log.Get().SetDebugLevel()
 	}
-	return err
+	return nil
 }
 
 func validateToAbsFilepath(filePath string, pathName string) (string, error) {

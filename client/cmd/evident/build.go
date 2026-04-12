@@ -56,7 +56,7 @@ var buildCmd = &cobra.Command{
 			return err
 		}
 
-		log.Get().Infof("The VM image built from %s (variation: %s) is available at %s\n", nixFlakeDirPath, variation, imageOutputPath)
+		log.Get().Infof("The VM image built from %s (variation: %s) is available at %s", nixFlakeDirPath, variation, imageOutputPath)
 		return nil
 	},
 }
