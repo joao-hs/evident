@@ -1,7 +1,7 @@
 use std::panic;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    if cfg!(feature = "local") && cfg!(feature = "debug") {
+    if cfg!(feature = "debug") {
         return Ok(());
     }
 

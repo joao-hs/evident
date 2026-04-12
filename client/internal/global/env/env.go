@@ -43,6 +43,6 @@ func newEnv() Env {
 	}
 }
 
-func (self *envImpl) GetDotEvidentPath() string {
-	return self.dotEvidentPath
+func (e *envImpl) GetDotEvidentPath() string {
+	return e.dotEvidentPath
 }

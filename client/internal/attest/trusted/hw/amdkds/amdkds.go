@@ -57,13 +57,13 @@ func GetInstance() AMDKDS {
 	return instance
 }
 
-func (self *amdkds) FetchCRL(model domain.AMDSEVSNPModel) error {
-	if !self.lastCRLFetch.IsZero() && time.Since(self.lastCRLFetch) < 24*time.Hour && self.certRevocationList != nil {
+func (a *amdkds) FetchCRL(model domain.AMDSEVSNPModel) error {
+	if !a.lastCRLFetch.IsZero() && time.Since(a.lastCRLFetch) < 24*time.Hour && a.certRevocationList != nil {
 		return nil
 	}
 
 	url := fmt.Sprintf(base+vcekCRLURIV1Template, model.String())
-	resp, err := self.httpClient.Get(url)
+	resp, err := a.httpClient.Get(url)
 	if err != nil {
 		fmt.Printf("Error making GET request: %v\n", err)
 		return err
@@ -92,8 +92,8 @@ func (self *amdkds) FetchCRL(model domain.AMDSEVSNPModel) error {
 		return err
 	}
 
-	self.certRevocationList = revocationList
-	self.lastCRLFetch = time.Now()
+	a.certRevocationList = revocationList
+	a.lastCRLFetch = time.Now()
 
 	if revocationList.RevokedCertificateEntries == nil {
 		return nil
@@ -102,13 +102,13 @@ func (self *amdkds) FetchCRL(model domain.AMDSEVSNPModel) error {
 	return nil
 }
 
-func (self *amdkds) GetVCEKParentChain(model domain.AMDSEVSNPModel) ([]*x509.Certificate, error) {
-	if self.ARK[model] != nil && self.ASK[model] != nil {
-		return []*x509.Certificate{self.ASK[model], self.ARK[model]}, nil
+func (a *amdkds) GetVCEKParentChain(model domain.AMDSEVSNPModel) ([]*x509.Certificate, error) {
+	if a.ARK[model] != nil && a.ASK[model] != nil {
+		return []*x509.Certificate{a.ASK[model], a.ARK[model]}, nil
 	}
 
 	url := fmt.Sprintf(base+vcekCertChainURIV1Template, model.String())
-	resp, err := self.httpClient.Get(url)
+	resp, err := a.httpClient.Get(url)
 	if err != nil {
 		fmt.Printf("Error making GET request: %v\n", err)
 		return nil, err
@@ -137,35 +137,35 @@ func (self *amdkds) GetVCEKParentChain(model domain.AMDSEVSNPModel) ([]*x509.Cer
 		return nil, err
 	}
 
-	self.ARK[model] = certChain[1]
-	self.ASK[model] = certChain[0]
+	a.ARK[model] = certChain[1]
+	a.ASK[model] = certChain[0]
 	return certChain, nil
 }
 
-func (self *amdkds) GetAsk(model domain.AMDSEVSNPModel) (*x509.Certificate, error) {
-	if self.ASK[model] != nil {
-		return self.ASK[model], nil
+func (a *amdkds) GetAsk(model domain.AMDSEVSNPModel) (*x509.Certificate, error) {
+	if a.ASK[model] != nil {
+		return a.ASK[model], nil
 	}
 
-	_, err := self.GetVCEKParentChain(model)
+	_, err := a.GetVCEKParentChain(model)
 	if err != nil {
 		return nil, err
 	}
 
-	return self.ASK[model], nil
+	return a.ASK[model], nil
 }
 
-func (self *amdkds) GetArk(model domain.AMDSEVSNPModel) (*x509.Certificate, error) {
-	if self.ARK[model] != nil {
-		return self.ARK[model], nil
+func (a *amdkds) GetArk(model domain.AMDSEVSNPModel) (*x509.Certificate, error) {
+	if a.ARK[model] != nil {
+		return a.ARK[model], nil
 	}
 
-	_, err := self.GetVCEKParentChain(model)
+	_, err := a.GetVCEKParentChain(model)
 	if err != nil {
 		return nil, err
 	}
 
-	return self.ARK[model], nil
+	return a.ARK[model], nil
 }
 
 // Utils

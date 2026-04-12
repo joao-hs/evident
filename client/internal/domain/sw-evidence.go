@@ -28,14 +28,14 @@ func NewTPMSoftwareEvidence(provider CloudServiceProvider, quoted []byte, signat
 	}, nil
 }
 
-func (self *tpmSoftwareEvidence) CloudServiceProvider() CloudServiceProvider {
-	return self.provider
+func (t *tpmSoftwareEvidence) CloudServiceProvider() CloudServiceProvider {
+	return t.provider
 }
 
-func (self *tpmSoftwareEvidence) Report() *TpmReport {
-	return self.report
+func (t *tpmSoftwareEvidence) Report() *TpmReport {
+	return t.report
 }
 
-func (self *tpmSoftwareEvidence) Raw() SignedRaw {
-	return self.raw
+func (t *tpmSoftwareEvidence) Raw() SignedRaw {
+	return t.raw
 }

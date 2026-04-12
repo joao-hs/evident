@@ -83,12 +83,12 @@ func NewVMImageMeasurer() (VMImageMeasurer, error) {
 	return self, nil
 }
 
-func (self *vmImageMeasurer) checkRequiredExternalCommands() error {
+func (v *vmImageMeasurer) checkRequiredExternalCommands() error {
 	var err error
 
-	self.systemdPcrLockCmd, err = exec.LookPath(_SYSTEMD_PCRLOCK)
+	v.systemdPcrLockCmd, err = exec.LookPath(_SYSTEMD_PCRLOCK)
 	if err != nil {
-		self.systemdPcrLockCmd, err = exec.LookPath(_ALT_PATH_SYSTEMD_PCRLOCK)
+		v.systemdPcrLockCmd, err = exec.LookPath(_ALT_PATH_SYSTEMD_PCRLOCK)
 		if err == nil {
 			return nil
 		}
@@ -98,7 +98,7 @@ func (self *vmImageMeasurer) checkRequiredExternalCommands() error {
 	return nil
 }
 
-func (self *vmImageMeasurer) MeasureImage(imagePath string) (domain.ExpectedPcrDigests, error) {
+func (v *vmImageMeasurer) MeasureImage(imagePath string) (domain.ExpectedPcrDigests, error) {
 	var (
 		zeroOutput       domain.ExpectedPcrDigests
 		pcrLockOutBuffer bytes.Buffer
@@ -117,8 +117,8 @@ func (self *vmImageMeasurer) MeasureImage(imagePath string) (domain.ExpectedPcrD
 
 	extractUKI(imagePath, _ESP_PARTITION_NAME, _ESP_PARTITION_MOUNT_PATH, _UKI_PATH_INSIDE_IMAGE, _UKI_TMP_PATH)
 
-	log.Get().Debugln("Running:", self.systemdPcrLockCmd, "lock-uki", _UKI_TMP_PATH)
-	pcrLockCmd := exec.Command(self.systemdPcrLockCmd, "lock-uki", _UKI_TMP_PATH)
+	log.Get().Debugln("Running:", v.systemdPcrLockCmd, "lock-uki", _UKI_TMP_PATH)
+	pcrLockCmd := exec.Command(v.systemdPcrLockCmd, "lock-uki", _UKI_TMP_PATH)
 	pcrLockCmd.Stdout = &pcrLockOutBuffer
 	pcrLockCmd.Stderr = &pcrLockErrBuffer
 	err = pcrLockCmd.Run()
@@ -192,11 +192,11 @@ func (self *vmImageMeasurer) MeasureImage(imagePath string) (domain.ExpectedPcrD
 	return output, nil
 }
 
-func (self *vmImageMeasurer) GetEquivalentCommands(imagePath string, outputFile string) string {
+func (v *vmImageMeasurer) GetEquivalentCommands(imagePath string, outputFile string) string {
 	output := strings.Builder{}
 	fmt.Fprintf(&output, "mkdir -p %s 1>/dev/null 2>&1 && ", filepath.Dir(_UKI_TMP_PATH))
-	fmt.Fprintf(&output, "sudo %s --copy-from %s %s > %s && ", self.systemdDissectCmd, imagePath, _UKI_PATH_INSIDE_IMAGE, _UKI_TMP_PATH)
-	fmt.Fprintf(&output, "%s lock-uki %s", self.systemdPcrLockCmd, _UKI_TMP_PATH)
+	fmt.Fprintf(&output, "sudo %s --copy-from %s %s > %s && ", v.systemdDissectCmd, imagePath, _UKI_PATH_INSIDE_IMAGE, _UKI_TMP_PATH)
+	fmt.Fprintf(&output, "%s lock-uki %s", v.systemdPcrLockCmd, _UKI_TMP_PATH)
 	if outputFile != "" {
 		fmt.Fprintf(&output, " > %s", outputFile)
 	}

@@ -9,7 +9,6 @@ debug = []
 request_certificate = []
 snp_ec2 = []
 snp_gce = []
-local = ["debug"]
 # add more here
 
 [dependencies]

@@ -20,15 +20,15 @@ const (
 	_HARDWARE_VENDOR_INTEL_STR           = "Intel"
 )
 
-func (self HardwareVendor) String() string {
+func (h HardwareVendor) String() string {
 	return [...]string{
 		_HARDWARE_VENDOR_UNKNOWN_STR,
 		_HARDWARE_VENDOR_AMD_DEFAULT_STR,
 		_HARDWARE_VENDOR_INTEL_STR,
-	}[self]
+	}[h]
 }
 
-func (self *HardwareVendor) FromString(str string) HardwareVendor {
+func (h *HardwareVendor) FromString(str string) HardwareVendor {
 	return map[string]HardwareVendor{
 		strings.ToLower(_HARDWARE_VENDOR_UNKNOWN_STR):         ENUM_HARDWARE_VENDOR_UNKNOWN,
 		strings.ToLower(_HARDWARE_VENDOR_AMD_DEFAULT_STR):     ENUM_HARDWARE_VENDOR_AMD,
@@ -37,16 +37,16 @@ func (self *HardwareVendor) FromString(str string) HardwareVendor {
 	}[strings.ToLower(str)]
 }
 
-func (self HardwareVendor) MarshalJSON() ([]byte, error) {
-	return json.Marshal(self.String())
+func (h HardwareVendor) MarshalJSON() ([]byte, error) {
+	return json.Marshal(h.String())
 }
 
-func (self *HardwareVendor) UnmarshalJSON(data []byte) error {
-	var status string
-	err := json.Unmarshal(data, &status)
+func (h *HardwareVendor) UnmarshalJSON(data []byte) error {
+	var val string
+	err := json.Unmarshal(data, &val)
 	if err != nil {
 		return err
 	}
-	*self = self.FromString(status)
+	*h = h.FromString(val)
 	return nil
 }

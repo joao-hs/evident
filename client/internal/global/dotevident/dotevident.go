@@ -22,7 +22,6 @@ func Get() DotEvident {
 
 type DotEvident interface {
 	store
-	deployments
 	logs
 }
 
@@ -30,7 +29,6 @@ type dotEvident struct {
 	// evidence
 	// policy
 	store
-	deployments
 	logs
 }
 
@@ -54,9 +52,8 @@ func loadOrNewDotEvident() DotEvident {
 func newDotEvident() DotEvident {
 	dotEvidentPath := env.Get().GetDotEvidentPath()
 	return &dotEvident{
-		store:       newStore(dotEvidentPath),
-		deployments: newDeployments(dotEvidentPath),
-		logs:        newLogs(dotEvidentPath),
+		store: newStore(dotEvidentPath),
+		logs:  newLogs(dotEvidentPath),
 	}
 }
 
@@ -68,16 +65,10 @@ func loadDotEvident() (DotEvident, error) {
 		return nil, err
 	}
 
-	loadedDeployment, err := loadDeployments(dotEvidentPath)
-	if err != nil {
-		return nil, err
-	}
-
 	logs := newLogs(dotEvidentPath)
 
 	return &dotEvident{
-		store:       loadedStore,
-		deployments: loadedDeployment,
-		logs:        logs,
+		store: loadedStore,
+		logs:  logs,
 	}, nil
 }

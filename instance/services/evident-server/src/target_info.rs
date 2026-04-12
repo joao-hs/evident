@@ -19,7 +19,6 @@ pub const TARGET_TYPE: TargetTypeEnum = TargetTypeEnum::SnpGce;
 pub const TARGET_TYPE_PROTO: proto::TargetType = match TARGET_TYPE {
     TargetTypeEnum::SnpEc2 => proto::TargetType::SnpEc2,
     TargetTypeEnum::SnpGce => proto::TargetType::SnpGce,
-    _ => proto::TargetType::Unspecified,
 };
 
 // ==============================

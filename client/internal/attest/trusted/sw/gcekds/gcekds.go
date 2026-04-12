@@ -38,21 +38,21 @@ func GetInstance() GCEKDS {
 	return instance
 }
 
-func (self *gcekds) GetIssuerCertificate(childCert *x509.Certificate) (*x509.Certificate, error) {
+func (g *gcekds) GetIssuerCertificate(childCert *x509.Certificate) (*x509.Certificate, error) {
 	if childCert == nil {
 		return nil, fmt.Errorf("nil certificate provided")
 	}
 
-	issuerCertURI, err := self.getCertificateEndorserURI(childCert)
+	issuerCertURI, err := g.getCertificateEndorserURI(childCert)
 	if err != nil {
 		return nil, err
 	}
 
-	if cert, exists := self.fetchedCache[issuerCertURI]; exists {
+	if cert, exists := g.fetchedCache[issuerCertURI]; exists {
 		return cert, nil
 	}
 
-	resp, err := self.httpClient.Get(issuerCertURI)
+	resp, err := g.httpClient.Get(issuerCertURI)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch issuer certificate from %s: %v", issuerCertURI, err)
 	}
@@ -76,12 +76,12 @@ func (self *gcekds) GetIssuerCertificate(childCert *x509.Certificate) (*x509.Cer
 		return nil, fmt.Errorf("the fetched certificate is not the issuer of the provided certificate: %v", err)
 	}
 
-	self.fetchedCache[issuerCertURI] = issuerCert
+	g.fetchedCache[issuerCertURI] = issuerCert
 
 	return issuerCert, nil
 }
 
-func (self *gcekds) getCertificateEndorserURI(cert *x509.Certificate) (string, error) {
+func (g *gcekds) getCertificateEndorserURI(cert *x509.Certificate) (string, error) {
 	// GCE's TPM's certificates have the x509v3 Authority Information Access populated with the URI of the issuing CA
 	if cert == nil {
 		return "", fmt.Errorf("nil certificate provided")

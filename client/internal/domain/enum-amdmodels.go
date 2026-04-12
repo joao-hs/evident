@@ -25,7 +25,7 @@ const (
 	_AMD_SEV_SNP_MODEL_TURIN_STR   = "Turin"
 )
 
-func (self AMDSEVSNPModel) String() string {
+func (a AMDSEVSNPModel) String() string {
 	return [...]string{
 		_AMD_SEV_SNP_MODEL_UNKNOWN_STR,
 		_AMD_SEV_SNP_MODEL_MILAN_STR,
@@ -33,10 +33,10 @@ func (self AMDSEVSNPModel) String() string {
 		_AMD_SEV_SNP_MODEL_BERGAMO_STR,
 		_AMD_SEV_SNP_MODEL_SIENA_STR,
 		_AMD_SEV_SNP_MODEL_TURIN_STR,
-	}[self]
+	}[a]
 }
 
-func (self *AMDSEVSNPModel) FromString(str string) AMDSEVSNPModel {
+func (a *AMDSEVSNPModel) FromString(str string) AMDSEVSNPModel {
 	return map[string]AMDSEVSNPModel{
 		strings.ToLower(_AMD_SEV_SNP_MODEL_UNKNOWN_STR): ENUM_AMD_SEV_SNP_MODEL_UNKNOWN,
 		strings.ToLower(_AMD_SEV_SNP_MODEL_MILAN_STR):   ENUM_AMD_SEV_SNP_MODEL_MILAN,
@@ -47,16 +47,16 @@ func (self *AMDSEVSNPModel) FromString(str string) AMDSEVSNPModel {
 	}[strings.ToLower(str)]
 }
 
-func (self AMDSEVSNPModel) MarshalJSON() ([]byte, error) {
-	return json.Marshal(self.String())
+func (a AMDSEVSNPModel) MarshalJSON() ([]byte, error) {
+	return json.Marshal(a.String())
 }
 
-func (self *AMDSEVSNPModel) UnmarshalJSON(data []byte) error {
-	var status string
-	err := json.Unmarshal(data, &status)
+func (a *AMDSEVSNPModel) UnmarshalJSON(data []byte) error {
+	var val string
+	err := json.Unmarshal(data, &val)
 	if err != nil {
 		return err
 	}
-	*self = self.FromString(status)
+	*a = a.FromString(val)
 	return nil
 }

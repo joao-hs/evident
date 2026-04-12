@@ -11,16 +11,16 @@ const (
 	_CLOUDPROVIDER_GCE
 )
 
-func (self cloudprovider) String() string {
+func (c cloudprovider) String() string {
 	return [...]string{
 		"unknown_csp",
 		"avm",
 		"ec2",
 		"gce",
-	}[self]
+	}[c]
 }
 
-func (self *cloudprovider) FromString(str string) cloudprovider {
+func (c *cloudprovider) FromString(str string) cloudprovider {
 	return map[string]cloudprovider{
 		"unknown_csp": _CLOUDPROVIDER_UNKNOWN,
 		"avm":         _CLOUDPROVIDER_AVM,
@@ -29,16 +29,16 @@ func (self *cloudprovider) FromString(str string) cloudprovider {
 	}[str]
 }
 
-func (self cloudprovider) MarshalJSON() ([]byte, error) {
-	return json.Marshal(self.String())
+func (c cloudprovider) MarshalJSON() ([]byte, error) {
+	return json.Marshal(c.String())
 }
 
-func (self *cloudprovider) UnmarshalJSON(data []byte) error {
-	var status string
-	err := json.Unmarshal(data, &status)
+func (c *cloudprovider) UnmarshalJSON(data []byte) error {
+	var val string
+	err := json.Unmarshal(data, &val)
 	if err != nil {
 		return err
 	}
-	*self = self.FromString(status)
+	*c = c.FromString(val)
 	return nil
 }

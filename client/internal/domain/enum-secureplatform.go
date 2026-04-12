@@ -22,15 +22,15 @@ const (
 	_SECURE_HARDWARE_PLATFORM_INTEL_TDX_ALTERNATIVE_STR     = "TDX"
 )
 
-func (self SecureHardwarePlatform) String() string {
+func (s SecureHardwarePlatform) String() string {
 	return [...]string{
 		_SECURE_HARDWARE_PLATFORM_UNKNOWN_STR,
 		_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP_STR,
 		_SECURE_HARDWARE_PLATFORM_INTEL_TDX_STR,
-	}[self]
+	}[s]
 }
 
-func (self *SecureHardwarePlatform) FromString(str string) SecureHardwarePlatform {
+func (s *SecureHardwarePlatform) FromString(str string) SecureHardwarePlatform {
 	return map[string]SecureHardwarePlatform{
 		strings.ToLower(_SECURE_HARDWARE_PLATFORM_UNKNOWN_STR):                   ENUM_SECURE_HARDWARE_PLATFORM_UNKNOWN,
 		strings.ToLower(_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP_STR):               ENUM_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP,
@@ -41,8 +41,8 @@ func (self *SecureHardwarePlatform) FromString(str string) SecureHardwarePlatfor
 	}[strings.ToLower(str)]
 }
 
-func (self *SecureHardwarePlatform) HardwareVendor() HardwareVendor {
-	switch *self {
+func (s *SecureHardwarePlatform) HardwareVendor() HardwareVendor {
+	switch *s {
 	case ENUM_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP:
 		return HardwareVendor(ENUM_HARDWARE_VENDOR_AMD)
 	case ENUM_SECURE_HARDWARE_PLATFORM_INTEL_TDX:
@@ -52,16 +52,16 @@ func (self *SecureHardwarePlatform) HardwareVendor() HardwareVendor {
 	}
 }
 
-func (self SecureHardwarePlatform) MarshalJSON() ([]byte, error) {
-	return json.Marshal(self.String())
+func (s SecureHardwarePlatform) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
 }
 
-func (self *SecureHardwarePlatform) UnmarshalJSON(data []byte) error {
-	var status string
-	err := json.Unmarshal(data, &status)
+func (s *SecureHardwarePlatform) UnmarshalJSON(data []byte) error {
+	var val string
+	err := json.Unmarshal(data, &val)
 	if err != nil {
 		return err
 	}
-	*self = self.FromString(status)
+	*s = s.FromString(val)
 	return nil
 }

@@ -31,16 +31,16 @@ const (
 	_CLOUD_SERVICE_PROVIDER_GCP_ALTERNATIVE_4_STR   = "GCE" // refers to GCP's Google Compute Engine service
 )
 
-func (self CloudServiceProvider) String() string {
+func (c CloudServiceProvider) String() string {
 	return [...]string{
 		_CLOUD_SERVICE_PROVIDER_UNKNOWN_STR,
 		_CLOUD_SERVICE_PROVIDER_AWS_DEFAULT_STR,
 		_CLOUD_SERVICE_PROVIDER_AZURE_DEFAULT_STR,
 		_CLOUD_SERVICE_PROVIDER_GCP_DEFAULT_STR,
-	}[self]
+	}[c]
 }
 
-func (self *CloudServiceProvider) FromString(str string) CloudServiceProvider {
+func (c *CloudServiceProvider) FromString(str string) CloudServiceProvider {
 	return map[string]CloudServiceProvider{
 		strings.ToLower(_CLOUD_SERVICE_PROVIDER_UNKNOWN_STR):             ENUM_CLOUD_SERVICE_PROVIDER_UNKNOWN,
 		strings.ToLower(_CLOUD_SERVICE_PROVIDER_AWS_DEFAULT_STR):         ENUM_CLOUD_SERVICE_PROVIDER_AWS,
@@ -59,16 +59,16 @@ func (self *CloudServiceProvider) FromString(str string) CloudServiceProvider {
 	}[strings.ToLower(str)]
 }
 
-func (self CloudServiceProvider) MarshalJSON() ([]byte, error) {
-	return json.Marshal(self.String())
+func (c CloudServiceProvider) MarshalJSON() ([]byte, error) {
+	return json.Marshal(c.String())
 }
 
-func (self *CloudServiceProvider) UnmarshalJSON(data []byte) error {
-	var status string
-	err := json.Unmarshal(data, &status)
+func (c *CloudServiceProvider) UnmarshalJSON(data []byte) error {
+	var val string
+	err := json.Unmarshal(data, &val)
 	if err != nil {
 		return err
 	}
-	*self = self.FromString(status)
+	*c = c.FromString(val)
 	return nil
 }

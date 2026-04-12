@@ -23,17 +23,17 @@ const (
 	_ENUM_HASH_ALGORITHM_SHA512_STR  = "sha512"
 )
 
-func (self HashAlgorithm) String() string {
+func (h HashAlgorithm) String() string {
 	return [...]string{
 		_ENUM_HASH_ALGORITHM_UNKNOWN_STR,
 		_ENUM_HASH_ALGORITHM_SHA1_STR,
 		_ENUM_HASH_ALGORITHM_SHA256_STR,
 		_ENUM_HASH_ALGORITHM_SHA384_STR,
 		_ENUM_HASH_ALGORITHM_SHA512_STR,
-	}[self]
+	}[h]
 }
 
-func (self *HashAlgorithm) FromString(str string) HashAlgorithm {
+func (h *HashAlgorithm) FromString(str string) HashAlgorithm {
 	return map[string]HashAlgorithm{
 		strings.ToLower(_ENUM_HASH_ALGORITHM_UNKNOWN_STR): ENUM_HASH_ALGORITHM_UNKNOWN,
 		strings.ToLower(_ENUM_HASH_ALGORITHM_SHA1_STR):    ENUM_HASH_ALGORITHM_SHA1,
@@ -43,16 +43,16 @@ func (self *HashAlgorithm) FromString(str string) HashAlgorithm {
 	}[strings.ToLower(str)]
 }
 
-func (self HashAlgorithm) MarshalJSON() ([]byte, error) {
-	return json.Marshal(self.String())
+func (h HashAlgorithm) MarshalJSON() ([]byte, error) {
+	return json.Marshal(h.String())
 }
 
-func (self *HashAlgorithm) UnmarshalJSON(data []byte) error {
+func (h *HashAlgorithm) UnmarshalJSON(data []byte) error {
 	var temp string
 	err := json.Unmarshal(data, &temp)
 	if err != nil {
 		return err
 	}
-	*self = self.FromString(temp)
+	*h = h.FromString(temp)
 	return nil
 }

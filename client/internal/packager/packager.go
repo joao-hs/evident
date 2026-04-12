@@ -54,15 +54,15 @@ func NewPackager(vmImageBuilder build.VMImageBuilder, vmImageMeasurer measure.VM
 	return self, nil
 }
 
-func (self *packager) checkRequiredExternalCommands() error {
+func (p *packager) checkRequiredExternalCommands() error {
 	var err error
 
-	self.nixCmd, err = exec.LookPath("nix")
+	p.nixCmd, err = exec.LookPath("nix")
 	if err != nil {
 		return fmt.Errorf("`nix` command is not present in PATH")
 	}
 
-	self.gpgCmd, err = exec.LookPath("gpg")
+	p.gpgCmd, err = exec.LookPath("gpg")
 	if err != nil {
 		return fmt.Errorf("`gpg` command is not present in PATH")
 	}
@@ -70,9 +70,9 @@ func (self *packager) checkRequiredExternalCommands() error {
 	return nil
 }
 
-func (self *packager) tryGetKeyId() (string, error) {
+func (p *packager) tryGetKeyId() (string, error) {
 	// 1. If there is only one key, use it
-	keys, err := self.listSecretKeyIDs()
+	keys, err := p.listSecretKeyIDs()
 	if err != nil {
 		return "", err
 	}
@@ -89,14 +89,14 @@ func (self *packager) tryGetKeyId() (string, error) {
 	return "", fmt.Errorf("multiple GPG secret keys found: specify which key to use with flag '--key'")
 }
 
-func (self *packager) GetEquivalentCommands(flakePath string, variation string, outputDirPath string) string {
+func (p *packager) GetEquivalentCommands(flakePath string, variation string, outputDirPath string) string {
 	output := strings.Builder{}
 	// TODO
 
 	return output.String()
 }
 
-func (self *packager) Package(flakePath string, variation string, outputDirPath string, repoUrl string, commitHash string) error {
+func (p *packager) Package(flakePath string, variation string, outputDirPath string, repoUrl string, commitHash string) error {
 	var err error
 
 	tmpOutputDirPath := "/tmp/evident-packaging-output" + fmt.Sprintf("%d", os.Getpid())
@@ -109,7 +109,7 @@ func (self *packager) Package(flakePath string, variation string, outputDirPath 
 	}
 
 	// 1. build image to outputDirPath/disk.raw
-	err = self.vmImageBuilder.BuildImage(
+	err = p.vmImageBuilder.BuildImage(
 		flakePath,
 		variation,
 		filepath.Join(tmpOutputDirPath, "disk.raw"),
@@ -119,7 +119,7 @@ func (self *packager) Package(flakePath string, variation string, outputDirPath 
 	}
 
 	// 2. measure image and write expected PCRs to outputDirPath/expected-pcrs.json
-	expectedPcrs, err := self.vmImageMeasurer.MeasureImage(
+	expectedPcrs, err := p.vmImageMeasurer.MeasureImage(
 		filepath.Join(tmpOutputDirPath, "disk.raw"),
 	)
 	if err != nil {
@@ -142,12 +142,12 @@ func (self *packager) Package(flakePath string, variation string, outputDirPath 
 
 	// 3. create and save manifest file to outputDirPath/MANIFEST.json
 
-	nixVersion, err := self.getNixVersion()
+	nixVersion, err := p.getNixVersion()
 	if err != nil {
 		return err
 	}
 
-	nixDerivationPath, err := self.vmImageBuilder.GetDerivationPath(flakePath, variation)
+	nixDerivationPath, err := p.vmImageBuilder.GetDerivationPath(flakePath, variation)
 	if err != nil {
 		return err
 	}
@@ -205,8 +205,8 @@ func (self *packager) Package(flakePath string, variation string, outputDirPath 
 	}
 
 	// 4. sign manifest file and save the signature to outputDirPath/<signing-pub-key-id>.sig.asc
-	signatureFilePath := filepath.Join(tmpOutputDirPath, fmt.Sprintf("%s.sig.asc", self.keyId))
-	signCmd := exec.Command(self.gpgCmd, "--output", signatureFilePath, "--local-user", self.keyId, "--armor", "--detach-sign", manifestFilePath)
+	signatureFilePath := filepath.Join(tmpOutputDirPath, fmt.Sprintf("%s.sig.asc", p.keyId))
+	signCmd := exec.Command(p.gpgCmd, "--output", signatureFilePath, "--local-user", p.keyId, "--armor", "--detach-sign", manifestFilePath)
 	var signStderr bytes.Buffer
 	signCmd.Stdin = os.Stdin
 	signCmd.Stderr = &signStderr
@@ -240,8 +240,8 @@ func (self *packager) Package(flakePath string, variation string, outputDirPath 
 	return nil
 }
 
-func (self *packager) getNixVersion() (string, error) {
-	nixVersionCmd := exec.Command(self.nixCmd, "--version")
+func (p *packager) getNixVersion() (string, error) {
+	nixVersionCmd := exec.Command(p.nixCmd, "--version")
 	var outBuffer bytes.Buffer
 	nixVersionCmd.Stdout = &outBuffer
 	err := nixVersionCmd.Run()
@@ -271,8 +271,8 @@ func getFileSha512(imagePath string) (string, error) {
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
 
-func (self *packager) listSecretKeyIDs() ([]string, error) {
-	cmd := exec.Command(self.gpgCmd, "--list-secret-keys", "--with-colons")
+func (p *packager) listSecretKeyIDs() ([]string, error) {
+	cmd := exec.Command(p.gpgCmd, "--list-secret-keys", "--with-colons")
 
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout

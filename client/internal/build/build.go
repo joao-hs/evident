@@ -44,20 +44,20 @@ func NewVMImageBuilder() (VMImageBuilder, error) {
 	return self, nil
 }
 
-func (self *vmImageBuilder) checkRequiredExternalCommands() error {
+func (v *vmImageBuilder) checkRequiredExternalCommands() error {
 	var err error
 
-	self.nixCmd, err = exec.LookPath(_NIX)
+	v.nixCmd, err = exec.LookPath(_NIX)
 	if err != nil {
 		return fmt.Errorf("`nix` command is not present in PATH")
 	}
-	log.Get().Debugf("nix command found at: %s", self.nixCmd)
+	log.Get().Debugf("nix command found at: %s", v.nixCmd)
 
-	self.cpCmd, err = exec.LookPath(_CP)
+	v.cpCmd, err = exec.LookPath(_CP)
 	if err != nil {
 		return fmt.Errorf("`cp` command is not present in PATH")
 	}
-	log.Get().Debugf("cp command found at: %s", self.cpCmd)
+	log.Get().Debugf("cp command found at: %s", v.cpCmd)
 
 	return nil
 }
@@ -66,7 +66,7 @@ func (self *vmImageBuilder) checkRequiredExternalCommands() error {
 // flakePath: absolute path to the Nix flake directory
 // variation: variation inside the Nix flake to build
 // imageOutputPath: absolute path where to store the built VM image
-func (self *vmImageBuilder) BuildImage(flakePath string, variation string, imageOutputPath string) error {
+func (v *vmImageBuilder) BuildImage(flakePath string, variation string, imageOutputPath string) error {
 	var (
 		err      error
 		buildOut bytes.Buffer
@@ -83,8 +83,8 @@ func (self *vmImageBuilder) BuildImage(flakePath string, variation string, image
 		}
 	}
 
-	log.Get().Debugln("Running:", self.nixCmd, "build", fmt.Sprintf("%s#%s", flakePath, variation), "-o", _NIX_RESULT_PATH)
-	buildCmd := exec.Command(self.nixCmd, "build", fmt.Sprintf("%s#%s", flakePath, variation), "-o", _NIX_RESULT_PATH)
+	log.Get().Debugln("Running:", v.nixCmd, "build", fmt.Sprintf("%s#%s", flakePath, variation), "-o", _NIX_RESULT_PATH)
+	buildCmd := exec.Command(v.nixCmd, "build", fmt.Sprintf("%s#%s", flakePath, variation), "-o", _NIX_RESULT_PATH)
 
 	buildCmd.Stdout = &buildOut
 	buildCmd.Stderr = &buildErr
@@ -99,8 +99,8 @@ func (self *vmImageBuilder) BuildImage(flakePath string, variation string, image
 		return fmt.Errorf("could not determine absolute path of built VM image: %s", err.Error())
 	}
 
-	log.Get().Debugln("Running:", self.cpCmd, resultVmImage, imageOutputPath)
-	cpCmd := exec.Command(self.cpCmd, resultVmImage, imageOutputPath)
+	log.Get().Debugln("Running:", v.cpCmd, resultVmImage, imageOutputPath)
+	cpCmd := exec.Command(v.cpCmd, resultVmImage, imageOutputPath)
 	err = cpCmd.Run()
 	if err != nil {
 		return fmt.Errorf("copying built VM image failed: %s", err.Error())
@@ -109,13 +109,13 @@ func (self *vmImageBuilder) BuildImage(flakePath string, variation string, image
 	return nil
 }
 
-func (self *vmImageBuilder) GetDerivationPath(flakePath string, variation string) (string, error) {
+func (v *vmImageBuilder) GetDerivationPath(flakePath string, variation string) (string, error) {
 	var (
 		err error
 	)
 
 	log.Get().Debugln("Getting derivation path for:", flakePath, variation)
-	derivationPathCmd := exec.Command(self.nixCmd, "eval", "--raw", fmt.Sprintf("%s#%s.drvPath", flakePath, variation))
+	derivationPathCmd := exec.Command(v.nixCmd, "eval", "--raw", fmt.Sprintf("%s#%s.drvPath", flakePath, variation))
 	derivationPathOut := &bytes.Buffer{}
 	derivationPathErr := &bytes.Buffer{}
 
@@ -132,9 +132,9 @@ func (self *vmImageBuilder) GetDerivationPath(flakePath string, variation string
 	return derivationPath, nil
 }
 
-func (self *vmImageBuilder) GetEquivalentCommands(flakePath string, variation string, imageOutputPath string) string {
+func (v *vmImageBuilder) GetEquivalentCommands(flakePath string, variation string, imageOutputPath string) string {
 	output := strings.Builder{}
-	fmt.Fprintf(&output, "%s build %s#%s -o %s && ", self.nixCmd, flakePath, variation, _NIX_RESULT_PATH)
-	fmt.Fprintf(&output, "%s %s %s", self.cpCmd, _NIX_RESULT_VM_IMAGE_PATH, imageOutputPath)
+	fmt.Fprintf(&output, "%s build %s#%s -o %s && ", v.nixCmd, flakePath, variation, _NIX_RESULT_PATH)
+	fmt.Fprintf(&output, "%s %s %s", v.cpCmd, _NIX_RESULT_VM_IMAGE_PATH, imageOutputPath)
 	return output.String()
 }

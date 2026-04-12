@@ -67,13 +67,6 @@ func directoryStructureExists(rootTargetPath string) (bool, error) {
 		return false, nil
 	}
 
-	if ok, err = subdirectoryExists(rootTargetPath, _DEPLOYMENTS_DIR); err != nil {
-		return false, err
-	}
-	if !ok {
-		return false, nil
-	}
-
 	if ok, err = subdirectoryExists(rootTargetPath, _STORE_DIR); err != nil {
 		return false, err
 	}

@@ -30,9 +30,9 @@ func newLogs(dotEvidentPath string) logs {
 	return l
 }
 
-func (self *logsImpl) GetLogFilePath(cmd string) string {
+func (l *logsImpl) GetLogFilePath(cmd string) string {
 	now := time.Now()
-	return filepath.Join(self.logsPath,
+	return filepath.Join(l.logsPath,
 		fmt.Sprintf("%s-%04d%02d%02d_%02d%02d%02d.log",
 			cmd,
 			now.Year(), int(now.Month()), now.Day(),

@@ -48,12 +48,12 @@ func loadStore(dotEvidentPath string) (store, error) {
 	return s, nil
 }
 
-func (self *storeImpl) filename(content []byte) string {
+func (s *storeImpl) filename(content []byte) string {
 	return fmt.Sprintf("%x.obj", sha256.Sum256(content))
 }
 
-func (self *storeImpl) findStoreFile(filename string) (string, error) {
-	_, err := os.Stat(filepath.Join(self.storePath, filename))
+func (s *storeImpl) findStoreFile(filename string) (string, error) {
+	_, err := os.Stat(filepath.Join(s.storePath, filename))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", nil
@@ -63,7 +63,7 @@ func (self *storeImpl) findStoreFile(filename string) (string, error) {
 	return filename, nil
 }
 
-func (self *storeImpl) findFile(linkpath string) (string, error) {
+func (s *storeImpl) findFile(linkpath string) (string, error) {
 	// 1. linkpath should exist
 	_, err := os.Lstat(linkpath)
 	if err != nil {
@@ -79,7 +79,7 @@ func (self *storeImpl) findFile(linkpath string) (string, error) {
 		return "", err
 	}
 	storeFilename := filepath.Base(storeFileRelPath)
-	storeFilename, err = self.findStoreFile(storeFilename)
+	storeFilename, err = s.findStoreFile(storeFilename)
 	if err != nil {
 		return "", err
 	}
@@ -87,8 +87,8 @@ func (self *storeImpl) findFile(linkpath string) (string, error) {
 	return storeFilename, nil
 }
 
-func (self *storeImpl) fileExists(linkpath string) (bool, error) {
-	storeFilename, err := self.findFile(linkpath)
+func (s *storeImpl) fileExists(linkpath string) (bool, error) {
+	storeFilename, err := s.findFile(linkpath)
 	if err != nil {
 		return false, err
 	}
@@ -98,8 +98,8 @@ func (self *storeImpl) fileExists(linkpath string) (bool, error) {
 	return true, nil
 }
 
-func (self *storeImpl) fileRead(linkPath string) ([]byte, error) {
-	storeFilename, err := self.findFile(linkPath)
+func (s *storeImpl) fileRead(linkPath string) ([]byte, error) {
+	storeFilename, err := s.findFile(linkPath)
 	if err != nil {
 		return nil, err
 	}
@@ -107,27 +107,27 @@ func (self *storeImpl) fileRead(linkPath string) ([]byte, error) {
 		return nil, fmt.Errorf("link or store file does not exist %s", linkPath)
 	}
 
-	return os.ReadFile(filepath.Join(self.storePath, storeFilename))
+	return os.ReadFile(filepath.Join(s.storePath, storeFilename))
 }
 
-func (self *storeImpl) fileWrite(content []byte, linkPath string) (bool, error) {
+func (s *storeImpl) fileWrite(content []byte, linkPath string) (bool, error) {
 	isNewFile := false
 
-	storeFilename := self.filename(content)
+	storeFilename := s.filename(content)
 
-	existingStoreFilename, err := self.findStoreFile(storeFilename)
+	existingStoreFilename, err := s.findStoreFile(storeFilename)
 	if err != nil {
 		return false, err
 	}
 	if existingStoreFilename == "" {
 		isNewFile = true
-		err = os.WriteFile(filepath.Join(self.storePath, storeFilename), content, 0444)
+		err = os.WriteFile(filepath.Join(s.storePath, storeFilename), content, 0444)
 		if err != nil {
 			return false, err
 		}
 	}
 
-	err = os.Link(filepath.Join(self.storePath, storeFilename), linkPath)
+	err = os.Link(filepath.Join(s.storePath, storeFilename), linkPath)
 	if err != nil {
 		return false, err
 	}

@@ -22,7 +22,7 @@ type ExpectedPcrDigests struct {
 	expectedDigest map[HashAlgorithm]string
 }
 
-func (self *ExpectedPcrDigests) ComputeExpectedDigest(hashAlg HashAlgorithm) (string, error) {
+func (e *ExpectedPcrDigests) ComputeExpectedDigest(hashAlg HashAlgorithm) (string, error) {
 	var (
 		hash     func([]byte) []byte
 		hashSize int
@@ -57,16 +57,16 @@ func (self *ExpectedPcrDigests) ComputeExpectedDigest(hashAlg HashAlgorithm) (st
 		return "", fmt.Errorf("unknown hashing algorithm")
 	}
 
-	if len(self.Records) == 0 {
+	if len(e.Records) == 0 {
 		return "", fmt.Errorf("there are no expected measurement records")
 	}
 
-	if self.expectedDigest == nil {
-		self.expectedDigest = make(map[HashAlgorithm]string)
+	if e.expectedDigest == nil {
+		e.expectedDigest = make(map[HashAlgorithm]string)
 	}
 
-	if self.expectedDigest[hashAlg] != "" {
-		return self.expectedDigest[hashAlg], nil
+	if e.expectedDigest[hashAlg] != "" {
+		return e.expectedDigest[hashAlg], nil
 	}
 
 	newInitialPcrValue := func() []byte {
@@ -89,29 +89,29 @@ func (self *ExpectedPcrDigests) ComputeExpectedDigest(hashAlg HashAlgorithm) (st
 		return hash(concat)
 	}
 
-	self.finalDigests = make(map[int][]byte)
-	for i, record := range self.Records {
-		if _, ok := self.finalDigests[record.Pcr]; !ok {
-			self.finalDigests[record.Pcr] = newInitialPcrValue()
+	e.finalDigests = make(map[int][]byte)
+	for i, record := range e.Records {
+		if _, ok := e.finalDigests[record.Pcr]; !ok {
+			e.finalDigests[record.Pcr] = newInitialPcrValue()
 		}
 		for _, hashDigest := range record.Digests {
 			if hashDigest.HashAlg != hashAlg.String() {
 				continue
 			}
 			extension, err := hex.DecodeString(hashDigest.Digest)
-			if err != nil || len(extension) != len(self.finalDigests[record.Pcr]) {
+			if err != nil || len(extension) != len(e.finalDigests[record.Pcr]) {
 				return "", fmt.Errorf("error while decoding digest from record number %d", i)
 			}
-			self.finalDigests[record.Pcr] = extend(self.finalDigests[record.Pcr], extension)
+			e.finalDigests[record.Pcr] = extend(e.finalDigests[record.Pcr], extension)
 		}
 	}
 
-	self.finalDigests[12] = newInitialPcrValue() // PCR12 must be asserted to zero since it measures overwrites
+	e.finalDigests[12] = newInitialPcrValue() // PCR12 must be asserted to zero since it measures overwrites
 
-	concat := make([]byte, len(self.finalDigests)*hashSize)
+	concat := make([]byte, len(e.finalDigests)*hashSize)
 	offset := 0
 	for pcrIndex := range 23 { // at most 24 PCR indices
-		if finalDigest, ok := self.finalDigests[pcrIndex]; ok {
+		if finalDigest, ok := e.finalDigests[pcrIndex]; ok {
 			offset += copy(concat[offset:], finalDigest)
 		}
 	}
@@ -119,7 +119,7 @@ func (self *ExpectedPcrDigests) ComputeExpectedDigest(hashAlg HashAlgorithm) (st
 	expectedDigest := hash(concat)
 
 	expectedDigestStr := hex.EncodeToString(expectedDigest)
-	self.expectedDigest[hashAlg] = expectedDigestStr
+	e.expectedDigest[hashAlg] = expectedDigestStr
 
 	return expectedDigestStr, nil
 }

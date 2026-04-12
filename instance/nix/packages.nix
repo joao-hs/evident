@@ -28,10 +28,10 @@ let
     "evident-bundle-${mandatoryFeature}${suffix}";
 
   mkRustService =
-    { service
-    , mandatoryFeature
-    , optionalFeatures ? []
-    , certificateIssuerEndpoint ? ""
+    { service,
+      mandatoryFeature,
+      optionalFeatures ? [],
+      certificateIssuerEndpoint ? ""
     }:
     rustPlatform.buildRustPackage {
       pname = service;
@@ -67,9 +67,9 @@ let
     };
 
   mkBundle =
-    { mandatoryFeature
-    , optionalFeatures ? []
-    , certificateIssuerEndpoint ? ""
+    { mandatoryFeature,
+      optionalFeatures ? [],
+      certificateIssuerEndpoint ? ""
     }:
     let
       keygen = mkRustService {
@@ -117,7 +117,6 @@ in
   default = mkBundle {
     mandatoryFeature = "snp_ec2";
     optionalFeatures = [
-      "debug"
       "request_certificate"
     ];
     certificateIssuerEndpoint = "https://ca.example.com";

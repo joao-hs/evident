@@ -19,15 +19,15 @@ const (
 	_EVIDENCE_TYPE_SOFTWARE_STR = "Software evidence"
 )
 
-func (self EvidenceType) String() string {
+func (e EvidenceType) String() string {
 	return [...]string{
 		_EVIDENCE_TYPE_UNKNOWN_STR,
 		_EVIDENCE_TYPE_HARDWARE_STR,
 		_EVIDENCE_TYPE_SOFTWARE_STR,
-	}[self]
+	}[e]
 }
 
-func (self *EvidenceType) FromString(str string) EvidenceType {
+func (e *EvidenceType) FromString(str string) EvidenceType {
 	return map[string]EvidenceType{
 		strings.ToLower(_EVIDENCE_TYPE_UNKNOWN_STR):  ENUM_EVIDENCE_TYPE_UNKNOWN,
 		strings.ToLower(_EVIDENCE_TYPE_HARDWARE_STR): ENUM_EVIDENCE_TYPE_HARDWARE,
@@ -35,16 +35,16 @@ func (self *EvidenceType) FromString(str string) EvidenceType {
 	}[strings.ToLower(str)]
 }
 
-func (self EvidenceType) MarshalJSON() ([]byte, error) {
-	return json.Marshal(self.String())
+func (e EvidenceType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(e.String())
 }
 
-func (self *EvidenceType) UnmarshalJSON(data []byte) error {
+func (e *EvidenceType) UnmarshalJSON(data []byte) error {
 	var temp string
 	err := json.Unmarshal(data, &temp)
 	if err != nil {
 		return err
 	}
-	*self = self.FromString(temp)
+	*e = e.FromString(temp)
 	return nil
 }
