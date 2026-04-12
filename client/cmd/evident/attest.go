@@ -69,7 +69,7 @@ var attestCmd = &cobra.Command{
 func init() {
 	attestCmd.Flags().Uint8("cpu-count", 0, "Number of vCPUs of the target confidential VM. If not provided, the client will attempt to reproduce the measurement for common CPU counts (e.g. 1, 2, 4, 8, ...).")
 	attestCmd.Flags().Uint16P("target-port", "p", 5000, "Port on which the target Evident server is listening")
-	attestCmd.Flags().String("expected-pcrs", "", "Path to the JSON file containing the expected PCR digests generated with `evident measure`")
+	attestCmd.Flags().String("expected-pcrs", "", "Path to the JSON file containing the expected PCR digests generated with evident measure")
 	attestCmd.Flags().Bool("use-trusted-packages", false, "Use packages at /etc/evident/trusted-packages/")
 	attestCmd.MarkFlagsOneRequired("expected-pcrs", "use-trusted-packages")
 	attestCmd.MarkFlagsMutuallyExclusive("expected-pcrs", "use-trusted-packages")

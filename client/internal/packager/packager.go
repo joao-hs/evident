@@ -140,7 +140,7 @@ func (p *packager) Package(flakePath string, variation string, outputDirPath str
 		return err
 	}
 
-	// 3. create and save manifest file to outputDirPath/MANIFEST.json
+	// 3. create and save manifest file to outputDirPath/MANIFEST
 
 	nixVersion, err := p.getNixVersion()
 	if err != nil {
@@ -161,7 +161,7 @@ func (p *packager) Package(flakePath string, variation string, outputDirPath str
 		return fmt.Errorf("unexpected derivation path filename: %s", nixDerivationFilename)
 	}
 	nixDerivationOutputName := strings.TrimSuffix(nixDerivationFilename, ".drv")
-	nixDerivationPathHash := nixDerivationOutputName[len("/nix/store/"):strings.Index(nixDerivationOutputName, "-")]
+	nixDerivationPathHash := nixDerivationOutputName[:strings.Index(nixDerivationOutputName, "-")]
 	nixDerivationOutputNameOnly := nixDerivationOutputName[strings.Index(nixDerivationOutputName, "-")+1:]
 
 	imageSha512, err := getFileSha512(filepath.Join(tmpOutputDirPath, "disk.raw"))
@@ -236,6 +236,46 @@ func (p *packager) Package(flakePath string, variation string, outputDirPath str
 	 *  	├── MANIFEST
 	 *		└── <KEY_ID>.sig.asc
 	 */
+
+	digest, err := expectedPcrs.ComputeExpectedDigest(domain.HashAlgorithm(domain.ENUM_HASH_ALGORITHM_SHA256))
+	if err != nil {
+		return err
+	}
+	packageDirName := fmt.Sprintf("%s.package", digest)
+	packageDirPath := filepath.Join(outputDirPath, packageDirName)
+	err = os.MkdirAll(packageDirPath, 0755)
+	if err != nil {
+		return fmt.Errorf("failed to create package directory: %v", err)
+	}
+
+	filesToMove := []struct {
+		src string
+		dst string
+	}{
+		{filepath.Join(tmpOutputDirPath, "disk.raw"), filepath.Join(packageDirPath, "disk.raw")},
+		{filepath.Join(tmpOutputDirPath, "expected-pcrs.json"), filepath.Join(packageDirPath, "expected-pcrs.json")},
+		{filepath.Join(tmpOutputDirPath, "MANIFEST"), filepath.Join(packageDirPath, "MANIFEST")},
+		{filepath.Join(tmpOutputDirPath, fmt.Sprintf("%s.sig.asc", p.keyId)), filepath.Join(packageDirPath, fmt.Sprintf("%s.sig.asc", p.keyId))},
+	}
+
+	for _, file := range filesToMove {
+		srcFile, err := os.Open(file.src)
+		if err != nil {
+			return fmt.Errorf("failed to open source file %s: %v", file.src, err)
+		}
+		srcFile.Close()
+
+		dstFile, err := os.Create(file.dst)
+		if err != nil {
+			return fmt.Errorf("failed to create destination file %s: %v", file.dst, err)
+		}
+		dstFile.Close()
+
+		cmd := exec.Command("mv", file.src, file.dst)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to move file from %s to %s: %v", file.src, file.dst, err)
+		}
+	}
 
 	return nil
 }

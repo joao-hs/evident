@@ -29,7 +29,7 @@ func Task(ctx context.Context, input Input) (Output, error) {
 	}
 
 	log.Get().Debugln("Verifying freshness and artifact binding of the hardware evidence")
-	log.Get().Debugf("Data: SHA512(%x||%x||%x)", input.Nonce[:], input.InstanceKey.KeyData, input.Ak.Raw)
+	log.Get().Debugf("Data: SHA512(nonce||rawInstanceKey||rawAk)")
 	buffer := bytes.Buffer{}
 	buffer.Write(input.Nonce[:])
 	buffer.Write(input.InstanceKey.KeyData)

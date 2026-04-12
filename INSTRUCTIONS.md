@@ -81,8 +81,9 @@ az login
 - Google Cloud: `gcloud`
 
 ```bash
-gcloud init          # say no when prompted
-gcloud auth login    # use the presented link to sign-in and follow instructions
+gcloud init                             # say no when prompted
+gcloud auth login                       # use the presented link to sign-in and follow instructions
+gcloud auth application-default login
 # no need to set the PROJECT_ID
 ```
 

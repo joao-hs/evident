@@ -3,7 +3,6 @@ package verifysnpsignature
 import (
 	"context"
 	"crypto/x509"
-	"encoding/hex"
 	"fmt"
 
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/domain"
@@ -27,15 +26,15 @@ func Task(ctx context.Context, input Input) (Output, error) {
 
 	log.Get().Debugln("Verifying AMD SEV-SNP hardware evidence certificate chain")
 	certChain := domain.NewCertChain(input.Vcek)
-	log.Get().Debugf("Versioned Chip Endorsement Key (VCEK) certificate, valid as leaf: %s", hex.EncodeToString(input.Vcek.Raw))
+	log.Get().Debugf("Versioned Chip Endorsement Key (VCEK) certificate, valid as leaf")
 	if err = certChain.AddParent(input.Ask); err != nil {
 		return zeroOutput, err
 	}
-	log.Get().Debugf("AMD SEV-SNP Attestation Key (ASK) certificate, valid as VCEK's parent: %s", hex.EncodeToString(input.Ask.Raw))
+	log.Get().Debugf("AMD SEV-SNP Attestation Key (ASK) certificate, valid as VCEK's parent")
 	if err = certChain.AddParent(input.Ark); err != nil {
 		return zeroOutput, err
 	}
-	log.Get().Debugf("AMD SEV-SNP AMD Root Key (ARK) certificate, valid as ASK's parent: %s", hex.EncodeToString(input.Ark.Raw))
+	log.Get().Debugf("AMD SEV-SNP AMD Root Key (ARK) certificate, valid as ASK's parent")
 	log.Get().Debugln("Certificate chain for AMD SEV-SNP hardware evidence is valid")
 
 	signedRaw := input.HwEvidence.Raw()

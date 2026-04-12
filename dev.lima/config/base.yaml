@@ -24,6 +24,14 @@ provision:
   - mode: system
     script: |
       #!/bin/bash
+      systemctl mask tmp.mount
+      # If it's currently mounted as tmpfs, remount as a bind or just unmount
+      if findmnt -n -o FSTYPE /tmp | grep -q tmpfs; then
+        systemctl stop tmp.mount
+      fi
+  - mode: system
+    script: |
+      #!/bin/bash
       set -uo pipefail
 
       apt-get update
@@ -71,7 +79,7 @@ provision:
       install_terraform() (
         set -e
         wget -O - https://apt.releases.hashicorp.com/gpg | gpg --no-tty --batch --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(grep -oP '(?<=UBUNTU_CODENAME=).*' /etc/os-release || lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com trixie main" | tee /etc/apt/sources.list.d/hashicorp.list
         apt-get update
         apt-get install -y terraform
       )

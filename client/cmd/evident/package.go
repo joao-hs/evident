@@ -78,6 +78,8 @@ var packageCmd = &cobra.Command{
 			return err
 		}
 
+		log.Get().Infoln("Package created at:", outputDirPath)
+
 		return nil
 	},
 }
