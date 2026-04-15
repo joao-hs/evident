@@ -63,7 +63,7 @@ pub struct Ec2TpmWrapper {
 
     ek_handle: KeyHandle,
     ak_handle: KeyHandle,
-    ak_public_key_data: Vec<u8>,
+    ak_public_key_spki_bytes: Vec<u8>,
 }
 
 impl Ec2TpmWrapper {
@@ -88,8 +88,8 @@ impl Ec2TpmWrapper {
             Self::create_ecc_ak(context, ek_handle)
         })?;
 
-        let ak_public_key_data: Vec<u8> = Self::with_new_session(&mut context, |context| {
-            Self::get_ak_public_key_data(context, ak_handle)
+        let ak_public_key_spki_bytes: Vec<u8> = Self::with_new_session(&mut context, |context| {
+            Self::get_ak_public_key_spki_bytes(context, ak_handle)
         })?;
         debug!("Successfully initialized Ec2TpmWrapper");
 
@@ -97,7 +97,7 @@ impl Ec2TpmWrapper {
             context: Arc::new(Mutex::new(context)),
             ek_handle,
             ak_handle,
-            ak_public_key_data,
+            ak_public_key_spki_bytes,
         })
     }
 
@@ -185,7 +185,7 @@ impl Ec2TpmWrapper {
         Ok(ak_handle)
     }
 
-    fn get_ak_public_key_data(
+    fn get_ak_public_key_spki_bytes(
         context: &mut Context,
         ak_handle: KeyHandle,
     ) -> Result<Vec<u8>, EvidentError> {
@@ -363,7 +363,7 @@ impl SoftwareEvidenceCollector for Ec2TpmWrapper {
             signing_key: Some(ProtoPublicKey {
                 algorithm: KeyAlgorithm::Ec.into(),
                 encoding: KeyEncoding::SpkiDer.into(),
-                key_data: self.ak_public_key_data.clone(),
+                key_data: self.ak_public_key_spki_bytes.clone(),
                 certificate: None,
                 key_params: Some(KeyParams::EllipticCurve(EllipticCurve::P384.into())),
             }),
@@ -371,7 +371,7 @@ impl SoftwareEvidenceCollector for Ec2TpmWrapper {
     }
 
     fn bind_elements(&self, hasher: &mut dyn DynDigest) {
-        hasher.update(&self.ak_public_key_data);
+        hasher.update(&self.ak_public_key_spki_bytes);
     }
 
     fn get_ek_pub_key(&self) -> Result<Vec<u8>, EvidentError> {

@@ -83,11 +83,11 @@ impl AttesterService for AttesterServiceHandler {
         let req = request.into_inner();
 
         let nonce = req.nonce.as_slice();
-        let activate_credentia_bundle = req.activate_credential_bundle;
+        let activate_credential_bundle = req.activate_credential_bundle;
 
         let evidence_bundle = self
             .attester_service
-            .get_evidence(nonce, activate_credentia_bundle)
+            .get_evidence(nonce, activate_credential_bundle)
             .await
             .map_err(|e| tonic::Status::internal(format!("Failed to get evidence: {e}")))?;
 

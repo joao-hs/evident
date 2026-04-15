@@ -21,6 +21,7 @@ type Verifier interface {
 		targetAddr netip.Addr,
 		targetPort uint16,
 		optCpuCount *uint8,
+		optInstanceID *string,
 		optExpectedPCRs *domain.ExpectedPcrDigests,
 		optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle,
 	) error
@@ -48,7 +49,7 @@ func NewVerifierWithContext(ctx context.Context, securePlatform domain.SecureHar
 	}, nil
 }
 
-func (v *verifier) Attest(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optExpectedPCRs *domain.ExpectedPcrDigests, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle) error {
+func (v *verifier) Attest(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optInstanceID *string, optExpectedPCRs *domain.ExpectedPcrDigests, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle) error {
 	var (
 		optPkgs packager.Packages = nil
 		err     error
@@ -62,16 +63,16 @@ func (v *verifier) Attest(targetAddr netip.Addr, targetPort uint16, optCpuCount 
 
 	switch v.securePlatform {
 	case domain.ENUM_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP:
-		return v.attestSNP(targetAddr, targetPort, optCpuCount, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle)
+		return v.attestSNP(targetAddr, targetPort, optCpuCount, optInstanceID, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle)
 	default:
 		return fmt.Errorf("unsupported secure platform: %s", v.securePlatform)
 	}
 }
 
-func (v *verifier) attestSNP(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optExpectedPCRs *domain.ExpectedPcrDigests, optPkgs packager.Packages, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle) error {
+func (v *verifier) attestSNP(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optInstanceID *string, optExpectedPCRs *domain.ExpectedPcrDigests, optPkgs packager.Packages, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle) error {
 	switch v.cloudProvider {
 	case domain.ENUM_CLOUD_SERVICE_PROVIDER_AWS:
-		return v.attestSNPEC2(targetAddr, targetPort, optCpuCount, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle)
+		return v.attestSNPEC2(targetAddr, targetPort, optCpuCount, optInstanceID, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle)
 	case domain.ENUM_CLOUD_SERVICE_PROVIDER_GCP:
 		return v.attestSNPGCE(targetAddr, targetPort, optCpuCount, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle)
 	default:
@@ -79,7 +80,7 @@ func (v *verifier) attestSNP(targetAddr netip.Addr, targetPort uint16, optCpuCou
 	}
 }
 
-func (v *verifier) attestSNPEC2(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optExpectedPCRs *domain.ExpectedPcrDigests, optPkgs packager.Packages, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle) error {
+func (v *verifier) attestSNPEC2(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optInstanceID *string, optExpectedPCRs *domain.ExpectedPcrDigests, optPkgs packager.Packages, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle) error {
 	cfg := config.DefaultConfig()
 
 	cfg.Addr = netip.AddrPortFrom(targetAddr, targetPort).String()
@@ -98,7 +99,7 @@ func (v *verifier) attestSNPEC2(targetAddr netip.Addr, targetPort uint16, optCpu
 	}
 	defer client.Close()
 
-	return workflows.RunSnpEc2AttestationWorkflow(v.ctx, client, optCpuCount, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle)
+	return workflows.RunSnpEc2AttestationWorkflow(v.ctx, client, optCpuCount, optInstanceID, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle)
 }
 
 func (v *verifier) attestSNPGCE(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optExpectedPCRs *domain.ExpectedPcrDigests, optPkgs packager.Packages, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle) error {

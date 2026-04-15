@@ -40,7 +40,28 @@ func (c *certificateIssuerVerifierServiceImpl) SubmitTrustedPackage(ctx context.
 }
 
 func (c *certificateIssuerVerifierServiceImpl) RequestInstanceKeyAttestationCertificate(ctx context.Context, request *pb.SignedAdditionalArtifactsBundle) (*pb.SignedCertificateChain, error) {
-	ok, err := crypto.VerifyDataSignature(request.SerializedAdditionalArtifactsBundle, request.Signature, request.SigningKey)
+	var (
+		ok  bool
+		err error
+	)
+
+	signingKeyEc, signingKeyRsa, err := crypto.ParsePublicKey(request.SigningKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse signing key: %w", err)
+	}
+	if signingKeyEc == nil && signingKeyRsa == nil {
+		return nil, fmt.Errorf("unsupported signing key type")
+	}
+	if signingKeyEc != nil && signingKeyRsa != nil {
+		return nil, fmt.Errorf("multiple signing key types provided")
+	}
+
+	switch {
+	case signingKeyEc != nil:
+		ok, err = crypto.VerifyECDSASignature(request.SerializedAdditionalArtifactsBundle, request.Signature, signingKeyEc)
+	case signingKeyRsa != nil:
+		ok, err = crypto.VerifyRSASignature(request.SerializedAdditionalArtifactsBundle, request.Signature, signingKeyRsa)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -95,6 +116,7 @@ func (c *certificateIssuerVerifierServiceImpl) RequestInstanceKeyAttestationCert
 		targetAddr,
 		5000,
 		nil, // Option: None -> Derive CPU count
+		nil, // Option: None -> No EC2 endorsement of EK
 		nil, // Option: None -> Use trusted packages
 		&additionalArtifactsBundle,
 	)
@@ -142,7 +164,7 @@ func (c *certificateIssuerVerifierServiceImpl) attestSnpEc2(ctx context.Context,
 		return err
 	}
 
-	return verifier.Attest(targetAddr, targetPort, nil, nil, additionalArtifactsBundle)
+	return verifier.Attest(targetAddr, targetPort, nil, nil, nil, additionalArtifactsBundle)
 }
 
 func (c *certificateIssuerVerifierServiceImpl) attestSnpGce(ctx context.Context, targetAddr netip.Addr, targetPort uint16, additionalArtifactsBundle *pb.AdditionalArtifactsBundle) error {
@@ -155,7 +177,7 @@ func (c *certificateIssuerVerifierServiceImpl) attestSnpGce(ctx context.Context,
 		return err
 	}
 
-	return verifier.Attest(targetAddr, targetPort, nil, nil, additionalArtifactsBundle)
+	return verifier.Attest(targetAddr, targetPort, nil, nil, nil, additionalArtifactsBundle)
 }
 
 func (c *certificateIssuerVerifierServiceImpl) issueCertificate(csrPemBytes []byte) (*pb.CertificateChain, error) {

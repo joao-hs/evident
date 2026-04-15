@@ -34,6 +34,7 @@ type AttestResourceModel struct {
 	MachineType            types.String `tfsdk:"machine_type"`
 	VirtualCoreCount       types.Int32  `tfsdk:"core_count"`
 	EvidentServerEndpoints types.Map    `tfsdk:"endpoints"`
+	Ec2InstanceIDs         types.Map    `tfsdk:"endpoints_to_ec2_instance_ids"`
 	TimeoutSec             types.Int32  `tfsdk:"timeout_sec"`
 	ExpectedPCRsJson       types.String `tfsdk:"expected_pcrs"`
 	AttestationResults     types.Map    `tfsdk:"attestation_results"`
@@ -107,6 +108,18 @@ func (a *attestResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 					),
 				},
 			},
+			"endpoints_to_ec2_instance_ids": schema.MapAttribute{
+				Required:    false,
+				ElementType: types.StringType,
+				Validators: []validator.Map{
+					mapvalidator.KeysAre(
+						stringvalidator.RegexMatches(
+							regexp.MustCompile(_IP_V4_OR_V6_REGEX),
+							"must be a valid IPv4 or IPv6 address",
+						),
+					),
+				},
+			},
 			"machine_type": schema.StringAttribute{
 				Optional: true,
 				Validators: []validator.String{
@@ -172,6 +185,14 @@ func (a *attestResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
+	var ec2InstanceIDs map[string]string = nil
+	if !plan.Ec2InstanceIDs.IsNull() && !plan.Ec2InstanceIDs.IsUnknown() {
+		resp.Diagnostics.Append(plan.Ec2InstanceIDs.ElementsAs(ctx, &ec2InstanceIDs, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
 	tflog.Debug(ctx, fmt.Sprintf("Waiting for %d seconds", plan.TimeoutSec.ValueInt32()))
 
 	err := utils.WaitForPort(timedCtx, endpoints)
@@ -180,7 +201,7 @@ func (a *attestResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	results, err := attest.AttestTargets(ctx, endpoints, uint8(plan.VirtualCoreCount.ValueInt32()), plan.SecureHardwarePlatform.ValueString(), plan.CloudServiceProvider.ValueString(), []byte(plan.ExpectedPCRsJson.ValueString()))
+	results, err := attest.AttestTargets(ctx, endpoints, uint8(plan.VirtualCoreCount.ValueInt32()), ec2InstanceIDs, plan.SecureHardwarePlatform.ValueString(), plan.CloudServiceProvider.ValueString(), []byte(plan.ExpectedPCRsJson.ValueString()))
 	if err != nil {
 		resp.Diagnostics.AddError("Error while attesting targets", err.Error())
 		return
@@ -240,13 +261,21 @@ func (a *attestResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
+	var newEc2InstanceIDs map[string]string = nil
+	if !plan.Ec2InstanceIDs.IsNull() && !plan.Ec2InstanceIDs.IsUnknown() {
+		resp.Diagnostics.Append(plan.Ec2InstanceIDs.ElementsAs(ctx, &newEc2InstanceIDs, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
 	err := utils.WaitForPort(timedCtx, newEndpoints)
 	if err != nil {
 		resp.Diagnostics.AddError("Error waiting for ports to open", err.Error())
 		return
 	}
 
-	results, err := attest.AttestTargets(ctx, newEndpoints, uint8(plan.VirtualCoreCount.ValueInt32()), plan.SecureHardwarePlatform.ValueString(), plan.CloudServiceProvider.ValueString(), []byte(plan.ExpectedPCRsJson.ValueString()))
+	results, err := attest.AttestTargets(ctx, newEndpoints, uint8(plan.VirtualCoreCount.ValueInt32()), newEc2InstanceIDs, plan.SecureHardwarePlatform.ValueString(), plan.CloudServiceProvider.ValueString(), []byte(plan.ExpectedPCRsJson.ValueString()))
 	if err != nil {
 		resp.Diagnostics.AddError("Error while attesting targets", err.Error())
 		return

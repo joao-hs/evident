@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/tasks/getgceendorsedartifacts"
-	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/tasks/getsnpevidence"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/tasks/getsnpevidence/getgcesnpevidence"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/tasks/gettrustedcerts/getamdtrustedcerts"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/tasks/gettrustedcerts/getgcetrustedcerts"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/tasks/verifyfreshness/verifysnpfreshness"
@@ -31,7 +31,7 @@ func RunSnpGceAttestationWorkflow(
 ) error {
 	var (
 		err                        error
-		getSnpEvidenceOutput       getsnpevidence.Output
+		getGceSnpEvidenceOutput    getgcesnpevidence.Output
 		getamdtrustedcertsOutput   getamdtrustedcerts.Output
 		getgcetrustedcertsOutput   getgcetrustedcerts.Output
 		getendorsedartifactsOutput getgceendorsedartifacts.Output
@@ -42,9 +42,9 @@ func RunSnpGceAttestationWorkflow(
 	}
 
 	log.Get().Infoln("Getting evidence")
-	getSnpEvidenceOutput, err = getsnpevidence.Task(ctx, getsnpevidence.Input{
-		Client:                     client,
-		AdditionalArtificatsBundle: optAdditionalArtifactsBundle,
+	getGceSnpEvidenceOutput, err = getgcesnpevidence.Task(ctx, getgcesnpevidence.Input{
+		Client:                       client,
+		OptAdditionalArtifactsBundle: optAdditionalArtifactsBundle,
 	})
 	if err != nil {
 		return err
@@ -54,7 +54,7 @@ func RunSnpGceAttestationWorkflow(
 
 	log.Get().Infoln("Getting trusted certificates from AMD")
 	getamdtrustedcertsOutput, err = getamdtrustedcerts.Task(ctx, getamdtrustedcerts.Input{
-		Model: getSnpEvidenceOutput.Model,
+		Model: getGceSnpEvidenceOutput.Model,
 	})
 	if err != nil {
 		return err
@@ -62,7 +62,7 @@ func RunSnpGceAttestationWorkflow(
 
 	log.Get().Infoln("Getting trusted certificates from GCE")
 	getgcetrustedcertsOutput, err = getgcetrustedcerts.Task(ctx, getgcetrustedcerts.Input{
-		AkProto: getSnpEvidenceOutput.AkProto,
+		Ak: getGceSnpEvidenceOutput.AkCert,
 	})
 	if err != nil {
 		return err
@@ -70,8 +70,8 @@ func RunSnpGceAttestationWorkflow(
 
 	log.Get().Infoln("Verifying the signature of the hardware evidence")
 	_, err = verifysnpsignature.Task(ctx, verifysnpsignature.Input{
-		HwEvidence: getSnpEvidenceOutput.HwEvidence,
-		Vcek:       getSnpEvidenceOutput.Vcek,
+		HwEvidence: getGceSnpEvidenceOutput.HwEvidence,
+		Vcek:       getGceSnpEvidenceOutput.Vcek,
 		Ask:        getamdtrustedcertsOutput.Ask,
 		Ark:        getamdtrustedcertsOutput.Ark,
 	})
@@ -85,10 +85,13 @@ func RunSnpGceAttestationWorkflow(
 	_, err = verifysnpfreshness.Task(
 		ctx,
 		verifysnpfreshness.Input{
-			SnpEvidence: getSnpEvidenceOutput.HwEvidence,
-			Nonce:       getSnpEvidenceOutput.Nonce,
-			InstanceKey: getSnpEvidenceOutput.InstanceKey,
-			Ak:          getgcetrustedcertsOutput.AKCertificate,
+			SnpEvidence:  getGceSnpEvidenceOutput.HwEvidence,
+			Nonce:        getGceSnpEvidenceOutput.Nonce,
+			InstanceCert: getGceSnpEvidenceOutput.InstanceKeyCert,
+			AkCert:       getgcetrustedcertsOutput.Ak,
+			AkEc:         nil, // AK is indentified by its certificate
+			AkRsa:        nil, // AK is indentified by its certificate
+			Secret:       nil, // No secret is needed; AK certificate proves AK presence in the TPM
 		},
 	)
 	if err != nil {
@@ -98,7 +101,7 @@ func RunSnpGceAttestationWorkflow(
 	log.Get().Infoln("Getting endorsed artifacts for hardware evidence measurement verification")
 	getendorsedartifactsOutput, err = getgceendorsedartifacts.Task(ctx, getgceendorsedartifacts.Input{
 		CPUCount:   optCpuCount,
-		HwEvidence: getSnpEvidenceOutput.HwEvidence,
+		HwEvidence: getGceSnpEvidenceOutput.HwEvidence,
 	})
 	if err != nil {
 		return err
@@ -108,7 +111,7 @@ func RunSnpGceAttestationWorkflow(
 	_, err = verifysnpmeasurement.Task(
 		ctx,
 		verifysnpmeasurement.Input{
-			SnpEvidence:     getSnpEvidenceOutput.HwEvidence,
+			SnpEvidence:     getGceSnpEvidenceOutput.HwEvidence,
 			OvmfBinaryBytes: getendorsedartifactsOutput.OvmfBinaryBytes,
 			CPUCount:        int(getendorsedartifactsOutput.CPUCount),
 		},
@@ -119,8 +122,8 @@ func RunSnpGceAttestationWorkflow(
 
 	log.Get().Infoln("Verifying the signature of the software evidence")
 	_, err = verifytpmsignature.Task(ctx, verifytpmsignature.Input{
-		SwEvidence:       getSnpEvidenceOutput.SwEvidence,
-		Ak:               getgcetrustedcertsOutput.AKCertificate,
+		SwEvidence:       getGceSnpEvidenceOutput.SwEvidence,
+		Ak:               getgcetrustedcertsOutput.Ak,
 		IntermediateAkCA: getgcetrustedcertsOutput.IntermediateCACertificate,
 		RootAkCA:         getgcetrustedcertsOutput.RootCACertificate,
 	})
@@ -133,9 +136,9 @@ func RunSnpGceAttestationWorkflow(
 	_, err = verifytpmfreshness.Task(
 		ctx,
 		verifytpmfreshness.Input{
-			TpmEvidence: getSnpEvidenceOutput.SwEvidence,
-			Nonce:       getSnpEvidenceOutput.Nonce,
-			InstanceKey: getSnpEvidenceOutput.InstanceKey,
+			TpmEvidence:  getGceSnpEvidenceOutput.SwEvidence,
+			Nonce:        getGceSnpEvidenceOutput.Nonce,
+			InstanceCert: getGceSnpEvidenceOutput.InstanceKeyCert,
 		},
 	)
 	if err != nil {
@@ -146,7 +149,7 @@ func RunSnpGceAttestationWorkflow(
 	_, err = verifytpmmeasurement.Task(
 		ctx,
 		verifytpmmeasurement.Input{
-			TpmEvidence:             getSnpEvidenceOutput.SwEvidence,
+			TpmEvidence:             getGceSnpEvidenceOutput.SwEvidence,
 			OptExpectedMeasurements: optExpectedPCRs,
 			OptPackages:             optPkgs,
 		},

@@ -68,9 +68,18 @@ The Lima VM will install all the required dependencies for build every _Evident_
 - AWS: `awscli`
 
 ```bash
-aws configure set region <your-region> # for example eu-west-1
-aws login                              # use the presented link to sign-in and follow instructions
+aws configure
 ```
+
+> The `aws configure` command will prompt you to enter your AWS Access Key ID and Secret Access Key, which you can obtain from the AWS Management Console. You may find those in IAM > Users > <Your User> > Security credentials > Create access key.
+>
+> Make sure to copy the Secret Access Key as it will not be shown again.
+>
+> You need to set a default region. Any should work, for example, you can set `eu-west-1`.
+>
+> There's no need to set a default output format, you can just press `Enter` when prompted.
+>
+> Check if the credentials are working by running `aws sts get-caller-identity`. If it returns your AWS account information, then the credentials are set up correctly.
 
 <!--- Azure: `az`
 
@@ -83,7 +92,7 @@ az login
 ```bash
 gcloud init                             # say no when prompted
 gcloud auth login                       # use the presented link to sign-in and follow instructions
-gcloud auth application-default login
+gcloud auth application-default login   # use the presented link to sign-in and follow instructions
 # no need to set the PROJECT_ID
 ```
 

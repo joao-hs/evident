@@ -11,7 +11,7 @@ import (
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/sanitize"
 )
 
-func AttestTargets(ctx context.Context, endpoints map[string]int32, cpuCount uint8, securePlatformStr string, cloudProviderStr string, expectedPCRsBytes []byte) (map[string]error, error) {
+func AttestTargets(ctx context.Context, endpoints map[string]int32, cpuCount uint8, ec2InstanceIDs map[string]string, securePlatformStr string, cloudProviderStr string, expectedPCRsBytes []byte) (map[string]error, error) {
 	addressEndpoints := make(map[netip.Addr]uint16)
 	for ip, port := range endpoints {
 		targetIp, err := sanitize.TargetIP(ip)
@@ -53,7 +53,13 @@ func AttestTargets(ctx context.Context, endpoints map[string]int32, cpuCount uin
 			// ensure that wg.Wait() unblocks
 			defer wg.Done()
 
-			err := verifier.Attest(ip, port, &cpuCount, &expectedPCRs, nil)
+			var optEc2InstanceID *string = nil
+			ec2InstanceId, ok := ec2InstanceIDs[ip.String()]
+			if ok && cloudProvider == domain.ENUM_CLOUD_SERVICE_PROVIDER_AWS {
+				optEc2InstanceID = &ec2InstanceId
+			}
+
+			err := verifier.Attest(ip, port, &cpuCount, optEc2InstanceID, &expectedPCRs, nil)
 
 			// ensure that this go routine will not be stuck sending to channel upon context cancellation
 			select {

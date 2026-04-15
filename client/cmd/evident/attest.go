@@ -37,13 +37,13 @@ var attestCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		cpuCount, err := sanitize.CPUCount(cmd.Flag("cpu-count").Value.String())
+		optCPUCount, err := sanitize.OptCPUCount(cmd.Flag("cpu-count").Value.String())
 		if err != nil {
 			return err
 		}
-		var optCpuCount *uint8 = nil
-		if cpuCount != 0 {
-			optCpuCount = &cpuCount
+		optInstanceId, err := sanitize.OptInstanceId(cmd.Flag("instance-id").Value.String())
+		if err != nil {
+			return err
 		}
 		expectedPcrPath := cmd.Flag("expected-pcrs").Value.String()
 		var optExpectedPCRs *domain.ExpectedPcrDigests = nil
@@ -62,12 +62,13 @@ var attestCmd = &cobra.Command{
 			return err
 		}
 
-		return verifier.Attest(targetIP, targetPort, optCpuCount, optExpectedPCRs, nil)
+		return verifier.Attest(targetIP, targetPort, optCPUCount, optInstanceId, optExpectedPCRs, nil)
 	},
 }
 
 func init() {
 	attestCmd.Flags().Uint8("cpu-count", 0, "Number of vCPUs of the target confidential VM. If not provided, the client will attempt to reproduce the measurement for common CPU counts (e.g. 1, 2, 4, 8, ...).")
+	attestCmd.Flags().StringP("instance-id", "i", "", "Instance ID of the target confidential VM (required for EC2 instances)")
 	attestCmd.Flags().Uint16P("target-port", "p", 5000, "Port on which the target Evident server is listening")
 	attestCmd.Flags().String("expected-pcrs", "", "Path to the JSON file containing the expected PCR digests generated with evident measure")
 	attestCmd.Flags().Bool("use-trusted-packages", false, "Use packages at /etc/evident/trusted-packages/")
