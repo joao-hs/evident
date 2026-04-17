@@ -16,8 +16,9 @@ type Input struct {
 }
 
 type Output struct {
-	Ask *x509.Certificate
-	Ark *x509.Certificate
+	Ask  *x509.Certificate
+	Asvk *x509.Certificate
+	Ark  *x509.Certificate
 }
 
 func Task(ctx context.Context, input Input) (Output, error) {
@@ -31,8 +32,6 @@ func Task(ctx context.Context, input Input) (Output, error) {
 
 	amdKds := amdkds.GetInstance()
 
-	// TODO: infer model from report
-
 	log.Get().Debugf("Fetching AMD SEV-SNP certificates from AMD Key Distribution Service (KDS) for model %s", input.Model)
 	log.Get().Debugln("Fetching AMD SEV Key (ASK) certificate from AMD KDS")
 	output.Ask, err = amdKds.GetAsk(input.Model)
@@ -44,6 +43,17 @@ func Task(ctx context.Context, input Input) (Output, error) {
 		return zeroOutput, fmt.Errorf("failed to store ASK certificate: %w", err)
 	}
 	log.Get().Debugf("Stored ASK certificate with path: %s", path)
+
+	log.Get().Debugln("Fetching AMD SEV VLEK Key (ASVK) certificate from AMD KDS")
+	output.Asvk, err = amdKds.GetAsvk(input.Model)
+	if err != nil {
+		return zeroOutput, err
+	}
+	path, err = dot.Store(output.Asvk.Raw)
+	if err != nil {
+		return zeroOutput, fmt.Errorf("failed to store ASVK certificate: %w", err)
+	}
+	log.Get().Debugf("Stored ASVK certificate with path: %s", path)
 
 	log.Get().Debugln("Fetching AMD Root Key (ARK) certificate from AMD KDS")
 	output.Ark, err = amdKds.GetArk(input.Model)

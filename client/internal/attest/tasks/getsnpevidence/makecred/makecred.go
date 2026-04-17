@@ -33,11 +33,17 @@ type Params struct {
 	SymKeyBits int
 }
 
-// DefaultParams returns SHA-256 + AES-128-CFB, matching the TCG default EK template.
-func DefaultParams() Params {
+func Ec2RsaEkParams() Params {
 	return Params{
 		HashAlg:    crypto.SHA256,
 		SymKeyBits: 128,
+	}
+}
+
+func Ec2EccEkParams() Params {
+	return Params{
+		HashAlg:    crypto.SHA384,
+		SymKeyBits: 256,
 	}
 }
 

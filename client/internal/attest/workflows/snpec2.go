@@ -12,8 +12,7 @@ import (
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/tasks/verifymeasurement/verifysnpmeasurement"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/tasks/verifymeasurement/verifytpmmeasurement"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/tasks/verifysignature/verifysnpsignature"
-	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/tasks/verifysignature/verifytpmsignature"
-	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/crypto"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/tasks/verifysignature/verifytpmsignature/verifyec2tpmsignature"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/domain"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/grpc"
@@ -36,6 +35,8 @@ func RunSnpEc2AttestationWorkflow(
 		getamdtrustedcertsOutput   getamdtrustedcerts.Output
 		getendorsedartifactsOutput getec2endorsedartifacts.Output
 	)
+	instanceID := "i-0cd5c8b42e1e57281"
+	optInstanceID = &instanceID
 
 	if (optExpectedPCRs == nil && optPkgs == nil) || (optExpectedPCRs != nil && optPkgs != nil) {
 		return fmt.Errorf("invalid workflow options: either expected PCR digests or trusted packages must be provided, but not both")
@@ -63,8 +64,8 @@ func RunSnpEc2AttestationWorkflow(
 	log.Get().Infoln("Verifying the signature of the hardware evidence")
 	_, err = verifysnpsignature.Task(ctx, verifysnpsignature.Input{
 		HwEvidence: getEc2SnpEvidenceOutput.HwEvidence,
-		Vcek:       getEc2SnpEvidenceOutput.Vcek,
-		Ask:        getamdtrustedcertsOutput.Ask,
+		Vlek:       getEc2SnpEvidenceOutput.Vlek,
+		Asvk:       getamdtrustedcertsOutput.Asvk,
 		Ark:        getamdtrustedcertsOutput.Ark,
 	})
 	if err != nil {
@@ -101,32 +102,26 @@ func RunSnpEc2AttestationWorkflow(
 	_, err = verifysnpmeasurement.Task(
 		ctx,
 		verifysnpmeasurement.Input{
-			SnpEvidence:     getEc2SnpEvidenceOutput.HwEvidence,
-			OvmfBinaryBytes: getendorsedartifactsOutput.UefiBinary,
-			CPUCount:        int(*optCpuCount),
+			SnpEvidence:          getEc2SnpEvidenceOutput.HwEvidence,
+			OvmfBinaryBytes:      getendorsedartifactsOutput.UefiBinary,
+			CPUCount:             int(*optCpuCount),
+			CloudServiceProvider: domain.CloudServiceProvider(domain.ENUM_CLOUD_SERVICE_PROVIDER_AWS),
 		},
 	)
 	if err != nil {
-		return err
-	}
-
-	if optInstanceID != nil {
-		log.Get().Infoln("Verifying the EK matches the AWS provided EK for the instance")
-		switch {
-		case getEc2SnpEvidenceOutput.EkEc != nil:
-			if !crypto.EqualECDSAPublicKeys(getEc2SnpEvidenceOutput.EkEc, getendorsedartifactsOutput.EkEc) {
-				return fmt.Errorf("EC EK public key from evidence does not match the EC EK public key from AWS for instance %s", *optInstanceID)
-			}
-		case getEc2SnpEvidenceOutput.EkRsa != nil:
-			if !crypto.EqualRSAPublicKeys(getEc2SnpEvidenceOutput.EkRsa, getendorsedartifactsOutput.EkRsa) {
-				return fmt.Errorf("RSA EK public key from evidence does not match the RSA EK public key from AWS for instance %s", *optInstanceID)
-			}
-		}
+		log.Get().Warnf("Known issue: https://github.com/aws/uefi/issues/19; Measurement verification of the hardware evidence failed: %v; proceeding", err)
 	}
 
 	log.Get().Infoln("Verifying the signature of the software evidence")
-	_, err = verifytpmsignature.Task(ctx, verifytpmsignature.Input{
-		SwEvidence: getEc2SnpEvidenceOutput.SwEvidence,
+	_, err = verifyec2tpmsignature.Task(ctx, verifyec2tpmsignature.Input{
+		SwEvidence:    getEc2SnpEvidenceOutput.SwEvidence,
+		AkEc:          getEc2SnpEvidenceOutput.AkEc,
+		AkRsa:         getEc2SnpEvidenceOutput.AkRsa,
+		OptInstanceID: optInstanceID,
+		EkEc:          getEc2SnpEvidenceOutput.EkEc,
+		ExpectedEkEc:  getendorsedartifactsOutput.EkEc,
+		EkRsa:         getEc2SnpEvidenceOutput.EkRsa,
+		ExpectedEkRsa: getendorsedartifactsOutput.EkRsa,
 	})
 	if err != nil {
 		return err

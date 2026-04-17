@@ -13,7 +13,7 @@ import (
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/tasks/verifymeasurement/verifysnpmeasurement"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/tasks/verifymeasurement/verifytpmmeasurement"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/tasks/verifysignature/verifysnpsignature"
-	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/tasks/verifysignature/verifytpmsignature"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest/tasks/verifysignature/verifytpmsignature/verifygcetpmsignature"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/domain"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/grpc"
@@ -111,9 +111,10 @@ func RunSnpGceAttestationWorkflow(
 	_, err = verifysnpmeasurement.Task(
 		ctx,
 		verifysnpmeasurement.Input{
-			SnpEvidence:     getGceSnpEvidenceOutput.HwEvidence,
-			OvmfBinaryBytes: getendorsedartifactsOutput.OvmfBinaryBytes,
-			CPUCount:        int(getendorsedartifactsOutput.CPUCount),
+			SnpEvidence:          getGceSnpEvidenceOutput.HwEvidence,
+			OvmfBinaryBytes:      getendorsedartifactsOutput.OvmfBinaryBytes,
+			CPUCount:             int(getendorsedartifactsOutput.CPUCount),
+			CloudServiceProvider: domain.CloudServiceProvider(domain.ENUM_CLOUD_SERVICE_PROVIDER_GCP),
 		},
 	)
 	if err != nil {
@@ -121,11 +122,11 @@ func RunSnpGceAttestationWorkflow(
 	}
 
 	log.Get().Infoln("Verifying the signature of the software evidence")
-	_, err = verifytpmsignature.Task(ctx, verifytpmsignature.Input{
-		SwEvidence:       getGceSnpEvidenceOutput.SwEvidence,
-		Ak:               getgcetrustedcertsOutput.Ak,
-		IntermediateAkCA: getgcetrustedcertsOutput.IntermediateCACertificate,
-		RootAkCA:         getgcetrustedcertsOutput.RootCACertificate,
+	_, err = verifygcetpmsignature.Task(ctx, verifygcetpmsignature.Input{
+		SwEvidence:           getGceSnpEvidenceOutput.SwEvidence,
+		AkCert:               getgcetrustedcertsOutput.Ak,
+		IntermediateAkCACert: getgcetrustedcertsOutput.IntermediateCACertificate,
+		RootAkCACert:         getgcetrustedcertsOutput.RootCACertificate,
 	})
 	if err != nil {
 		return err

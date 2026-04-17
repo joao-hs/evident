@@ -30,7 +30,7 @@ type Output struct {
 	Nonce           [64]byte
 	Model           domain.AMDSEVSNPModel
 	HwEvidence      domain.HardwareEvidence[*domain.AmdSevSnpAttestationReport]
-	Vcek            *x509.Certificate
+	Vlek            *x509.Certificate
 	SwEvidence      domain.SoftwareEvidence
 	AkEc            *ecdsa.PublicKey
 	AkRsa           *rsa.PublicKey
@@ -91,12 +91,35 @@ func Task(ctx context.Context, input Input) (Output, error) {
 			return zeroOutput, fmt.Errorf("TPM endorsement key in make credential input bundle is both a valid EC and RSA public key, which should not be possible")
 		}
 
+		switch {
+		case ekEc != nil:
+			output.EkEc = ekEc
+			ekEcBytes, err := x509.MarshalPKIXPublicKey(ekEc)
+			if err != nil {
+				return zeroOutput, fmt.Errorf("error while converting EC EK public key to bytes: %w", err)
+			}
+			path, err = dot.Store(ekEcBytes)
+			if err != nil {
+				return zeroOutput, fmt.Errorf("error while storing EC EK public key bytes in dot: %w", err)
+			}
+		case ekRsa != nil:
+			output.EkRsa = ekRsa
+			ekRsaBytes, err := x509.MarshalPKIXPublicKey(ekRsa)
+			if err != nil {
+				return zeroOutput, fmt.Errorf("error while marshaling RSA EK public key: %w", err)
+			}
+			path, err = dot.Store(ekRsaBytes)
+			if err != nil {
+				return zeroOutput, fmt.Errorf("error while storing RSA EK public key bytes in dot: %w", err)
+			}
+		}
+
 		var makeCredentialResult *makecred.Result
 		switch {
 		case ekEc != nil:
-			makeCredentialResult, err = makecred.ECC(ekEc, secret[:], akName, makecred.DefaultParams())
+			makeCredentialResult, err = makecred.ECC(ekEc, secret[:], akName, makecred.Ec2EccEkParams())
 		case ekRsa != nil:
-			makeCredentialResult, err = makecred.RSA(ekRsa, secret[:], akName, makecred.DefaultParams())
+			makeCredentialResult, err = makecred.RSA(ekRsa, secret[:], akName, makecred.Ec2RsaEkParams())
 		}
 		if err != nil {
 			return zeroOutput, fmt.Errorf("error while making credential: %w", err)
@@ -105,6 +128,17 @@ func Task(ctx context.Context, input Input) (Output, error) {
 			CredentialBlob:  makeCredentialResult.CredentialBlob,
 			EncryptedSecret: makeCredentialResult.EncryptedSecret,
 		}
+		path, err = dot.Store(activateCredentialBundle.CredentialBlob)
+		if err != nil {
+			return zeroOutput, fmt.Errorf("error while storing credential blob from make credential result in dot: %w", err)
+		}
+		log.Get().Debugf("Credential blob from make credential result stored in dot at path: %s", path)
+
+		path, err = dot.Store(activateCredentialBundle.EncryptedSecret)
+		if err != nil {
+			return zeroOutput, fmt.Errorf("error while storing encrypted secret from make credential result in dot: %w", err)
+		}
+		log.Get().Debugf("Encrypted secret from make credential result stored in dot at path: %s", path)
 	}
 
 	var getEvidenceRequest = &pb.GetEvidenceRequest{}
@@ -155,28 +189,28 @@ func Task(ctx context.Context, input Input) (Output, error) {
 	{
 		_, err := crypto.ParseECDSAPublicKey(snpEvidenceProto.SigningKey)
 		if err != nil {
-			return zeroOutput, fmt.Errorf("error while parsing VCEK in SNP evidence: %w", err)
+			return zeroOutput, fmt.Errorf("error while parsing VLEK in SNP evidence: %w", err)
 		}
 
-		vcekCert, err := crypto.ParseCertificate(snpEvidenceProto.SigningKey.GetCertificate())
+		vlekCert, err := crypto.ParseCertificate(snpEvidenceProto.SigningKey.GetCertificate())
 		if err != nil {
-			return zeroOutput, fmt.Errorf("error while parsing VCEK certificate: %w", err)
+			return zeroOutput, fmt.Errorf("error while parsing VLEK certificate: %w", err)
 		}
 
-		path, err = dot.Store(vcekCert.Raw)
+		path, err = dot.Store(vlekCert.Raw)
 		if err != nil {
-			return zeroOutput, fmt.Errorf("error while storing VCEK certificate bytes in dot: %w", err)
+			return zeroOutput, fmt.Errorf("error while storing VLEK certificate bytes in dot: %w", err)
 		}
-		log.Get().Debugf("VCEK certificate bytes stored in dot at path: %s", path)
-		output.Vcek = vcekCert
+		log.Get().Debugf("VLEK certificate bytes stored in dot at path: %s", path)
+		output.Vlek = vlekCert
 	}
 
-	// infer model from VCEK certificate
+	// infer model from VLEK certificate
 	// TODO: ideally, we would infer the model from the SNP evidence itself
 	{
-		model, err := getsnpevidencesubtasks.ExtractModelFromVcekCertIssuer(output.Vcek)
+		model, err := getsnpevidencesubtasks.ExtractModelFromCertIssuer(output.Vlek)
 		if err != nil {
-			return zeroOutput, fmt.Errorf("error while extracting model from VCEK certificate: %w", err)
+			return zeroOutput, fmt.Errorf("error while extracting model from VLEK certificate: %w", err)
 		}
 		output.Model = model
 	}

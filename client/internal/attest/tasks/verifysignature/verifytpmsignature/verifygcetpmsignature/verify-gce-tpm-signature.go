@@ -1,4 +1,4 @@
-package verifytpmsignature
+package verifygcetpmsignature
 
 import (
 	"context"
@@ -11,10 +11,10 @@ import (
 )
 
 type Input struct {
-	SwEvidence       domain.SoftwareEvidence
-	Ak               *x509.Certificate
-	IntermediateAkCA *x509.Certificate
-	RootAkCA         *x509.Certificate
+	SwEvidence           domain.SoftwareEvidence
+	AkCert               *x509.Certificate
+	IntermediateAkCACert *x509.Certificate
+	RootAkCACert         *x509.Certificate
 }
 
 type Output struct{}
@@ -26,13 +26,13 @@ func Task(ctx context.Context, input Input) (Output, error) {
 	)
 
 	log.Get().Debugln("Verifying TPM quote signature certificate chain")
-	certChain := domain.NewCertChain(input.Ak)
+	certChain := domain.NewCertChain(input.AkCert)
 	log.Get().Debugf("Attestation Key (AK) certificate, valid as leaf")
-	if err = certChain.AddParent(input.IntermediateAkCA); err != nil {
+	if err = certChain.AddParent(input.IntermediateAkCACert); err != nil {
 		return zeroOutput, err
 	}
 	log.Get().Debugf("Intermediate AK CA certificate, valid as AK's parent")
-	if err = certChain.AddParent(input.RootAkCA); err != nil {
+	if err = certChain.AddParent(input.RootAkCACert); err != nil {
 		return zeroOutput, err
 	}
 	log.Get().Debugf("Root AK CA certificate, valid as Intermediate AK CA's parent")

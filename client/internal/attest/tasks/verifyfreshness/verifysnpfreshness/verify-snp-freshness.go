@@ -35,7 +35,7 @@ func Task(ctx context.Context, input Input) (Output, error) {
 	}
 
 	log.Get().Debugln("Verifying freshness and artifact binding of the hardware evidence")
-	log.Get().Debugf("Data: SHA512(nonce||rawInstanceKey||rawAk)")
+	log.Get().Debugf("Data: SHA512(nonce||rawInstanceKey||(akCert|rawAkKey)[||secret])")
 
 	var instanceKeySPKIBytes []byte
 	switch input.InstanceCert.PublicKey.(type) {

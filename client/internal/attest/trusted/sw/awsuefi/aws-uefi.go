@@ -3,8 +3,11 @@ package awsuefi
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
+
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 )
 
 const (
@@ -30,11 +33,7 @@ var (
 func GetInstance() Ec2FirmwareFetcher {
 	once.Do(func() {
 		instance = &ec2FirmwareFetcher{
-			httpClient: &http.Client{
-				CheckRedirect: func(req *http.Request, via []*http.Request) error {
-					return fmt.Errorf("redirects are not allowed (redirected to %s)", req.URL.String())
-				},
-			},
+			httpClient:     &http.Client{},
 			firmwareBinary: nil,
 		}
 	})
@@ -63,6 +62,8 @@ type githubAsset struct {
 }
 
 func (e *ec2FirmwareFetcher) downloadLatestFirmware() ([]byte, error) {
+	log.Get().Debugf("Fetching latest EC2 firmware release metadata from Github API: %s", AWS_UEFI_GITHUB_RELEASE_METADATA_URL)
+
 	req, err := http.NewRequest(http.MethodGet, AWS_UEFI_GITHUB_RELEASE_METADATA_URL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request for latest firmware release: %w", err)
@@ -102,6 +103,8 @@ func (e *ec2FirmwareFetcher) downloadLatestFirmware() ([]byte, error) {
 		return nil, fmt.Errorf("unexpected firmware asset name in download URL: %s", firmwareDownloadURL)
 	}
 
+	log.Get().Debugf("Downloading firmware binary from URL: %s", firmwareDownloadURL)
+
 	firmwareResp, err := e.httpClient.Get(firmwareDownloadURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download firmware binary: %w", err)
@@ -112,8 +115,7 @@ func (e *ec2FirmwareFetcher) downloadLatestFirmware() ([]byte, error) {
 		return nil, fmt.Errorf("unexpected status when downloading firmware binary: %s", firmwareResp.Status)
 	}
 
-	firmwareBinary := make([]byte, firmwareResp.ContentLength)
-	_, err = firmwareResp.Body.Read(firmwareBinary)
+	firmwareBinary, err := io.ReadAll(firmwareResp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read firmware binary response body: %w", err)
 	}

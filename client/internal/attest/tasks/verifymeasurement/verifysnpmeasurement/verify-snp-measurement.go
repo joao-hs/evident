@@ -15,9 +15,10 @@ import (
 )
 
 type Input struct {
-	SnpEvidence     domain.HardwareEvidence[*domain.AmdSevSnpAttestationReport]
-	OvmfBinaryBytes []byte
-	CPUCount        int
+	SnpEvidence          domain.HardwareEvidence[*domain.AmdSevSnpAttestationReport]
+	OvmfBinaryBytes      []byte
+	CPUCount             int
+	CloudServiceProvider domain.CloudServiceProvider
 }
 
 type Output struct{}
@@ -54,12 +55,22 @@ func Task(ctx context.Context, input Input) (Output, error) {
 		return zeroOutput, err
 	}
 
+	var vmmType vmmtypes.VMMType
+	switch input.CloudServiceProvider {
+	case domain.ENUM_CLOUD_SERVICE_PROVIDER_AWS:
+		vmmType = vmmtypes.EC2
+	case domain.ENUM_CLOUD_SERVICE_PROVIDER_GCP:
+		vmmType = vmmtypes.GCE
+	default:
+		return zeroOutput, fmt.Errorf("unsupported cloud service provider: %s", input.CloudServiceProvider)
+	}
+
 	ld, err := guest.LaunchDigestFromOVMF(
 		ovmf,
 		0x1, // default guest features
 		input.CPUCount,
 		ovmfHash,
-		vmmtypes.GCE,
+		vmmType,
 		"EPYC-Milan-v2", // vCPU signature does not influence launch digest
 	)
 	if err != nil {

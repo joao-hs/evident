@@ -18,12 +18,14 @@ use sha2::{Digest, Sha256, Sha512};
 #[derive(Clone)]
 pub struct AttesterService {
     instance_public_key: PublicKey,
+    instance_certificate: Certificate,
 }
 
 impl AttesterService {
-    pub fn new(instance_public_key: PublicKey) -> Self {
+    pub fn new(instance_public_key: PublicKey, instance_certificate: Certificate) -> Self {
         Self {
             instance_public_key,
+            instance_certificate,
         }
     }
 
@@ -58,7 +60,7 @@ impl AttesterService {
                 algorithm: KeyAlgorithm::Ec.into(),
                 encoding: KeyEncoding::SpkiDer.into(),
                 key_data: pk_der.to_vec(),
-                certificate: None,
+                certificate: Some(self.instance_certificate.clone()),
                 key_params: Some(KeyParams::EllipticCurve(EllipticCurve::P384.into())),
             }),
             make_credential_input,

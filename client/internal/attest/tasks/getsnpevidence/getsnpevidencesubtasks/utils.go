@@ -25,21 +25,22 @@ func GenerateRandomBytes() [64]byte {
 	return b
 }
 
-// ExtractModelFromVcekCertIssuer extracts the AMD SEV SNP model from the issuer's CN field in the provided VCEK certificate.
-// The issuer's CN field is expected to be in the format "SEV-<model>".
+// ExtractModelFromCertIssuer extracts the AMD SEV SNP model from the issuer's CN field in the provided VCEK/VLEK certificate.
+// The issuer's CN field is expected to be in the format "SEV-<model>" in VCEKs or "SEV-VLEK-<model>" in VLEKs.
 //
 // Parameters:
-//   - vcekCert: A pointer to an x509.Certificate containing the VCEK certificate. Must be non-nil
+//   - vcekCert: A pointer to an x509.Certificate containing the VCEK/VLEK certificate. Must be non-nil
 //
 // Returns:
 //   - domain.AMDSEVSNPModel: The extracted AMD SEV SNP model.
 //   - error: An error if the issuer CN format is invalid or the model is unknown.
-func ExtractModelFromVcekCertIssuer(vcekCert *x509.Certificate) (domain.AMDSEVSNPModel, error) {
+func ExtractModelFromCertIssuer(vcekCert *x509.Certificate) (domain.AMDSEVSNPModel, error) {
 	issuer := vcekCert.Issuer.CommonName
 	if !strings.HasPrefix(issuer, "SEV-") {
 		return domain.ENUM_AMD_SEV_SNP_MODEL_UNKNOWN, fmt.Errorf("invalid issuer CN format")
 	}
 	modelStr := strings.TrimPrefix(issuer, "SEV-")
+	modelStr = strings.TrimPrefix(modelStr, "VLEK-")
 	switch modelStr {
 	case "Milan":
 		return domain.ENUM_AMD_SEV_SNP_MODEL_MILAN, nil

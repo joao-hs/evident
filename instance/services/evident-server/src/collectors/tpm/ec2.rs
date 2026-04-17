@@ -6,29 +6,12 @@ use common_core::{
         evidence_bundle::SoftwareEvidence, public_key::KeyParams,
     },
 };
-use log::{debug, warn};
+use log::{debug, error, warn};
 use nom::{IResult, bytes::complete::take};
 use p384::{PublicKey, ecdsa, pkcs8::EncodePublicKey};
 use sha2::digest::DynDigest;
 use std::sync::{Arc, Mutex};
-use tss_esapi::{
-    Context, TctiNameConf,
-    attributes::ObjectAttributesBuilder,
-    constants::{SessionType, Tss2ResponseCodeKind},
-    handles::{KeyHandle, PersistentTpmHandle, SessionHandle, TpmHandle},
-    interface_types::{
-        algorithm::{HashingAlgorithm, PublicAlgorithm, SignatureSchemeAlgorithm},
-        ecc::EccCurve,
-        resource_handles::Provision,
-    },
-    structures::{
-        Data, EccPoint, EccScheme, EncryptedSecret, HashScheme, IdObject,
-        KeyDerivationFunctionScheme, PcrSelectionListBuilder, PcrSlot, Public, PublicBuilder,
-        PublicEccParametersBuilder, SignatureScheme, SymmetricDefinition,
-        SymmetricDefinitionObject,
-    },
-    traits::Marshall,
-};
+use tss_esapi::{Context, handles::KeyHandle, structures::PcrSlot};
 
 // EC2's NitroTPM starts with:
 
@@ -68,6 +51,8 @@ pub struct Ec2TpmWrapper {
 
 impl Ec2TpmWrapper {
     pub fn new() -> Result<Self, EvidentError> {
+        use tss_esapi::{TctiNameConf, handles::PersistentTpmHandle};
+
         debug!("Initializing GceTpmWrapper...");
 
         let tcti = TctiNameConf::Device(Default::default());
@@ -105,6 +90,21 @@ impl Ec2TpmWrapper {
         context: &mut Context,
         ek_handle: KeyHandle,
     ) -> Result<KeyHandle, EvidentError> {
+        use tss_esapi::{
+            attributes::ObjectAttributesBuilder,
+            constants::Tss2ResponseCodeKind,
+            handles::{PersistentTpmHandle, TpmHandle},
+            interface_types::{
+                algorithm::{HashingAlgorithm, PublicAlgorithm},
+                ecc::EccCurve,
+                resource_handles::Provision,
+            },
+            structures::{
+                EccPoint, EccScheme, HashScheme, KeyDerivationFunctionScheme, PublicBuilder,
+                PublicEccParametersBuilder, SymmetricDefinitionObject,
+            },
+        };
+
         debug!("Creating ECC Attestation Key (AK) under the EK...");
 
         // 1. Create the AK template
@@ -189,6 +189,8 @@ impl Ec2TpmWrapper {
         context: &mut Context,
         ak_handle: KeyHandle,
     ) -> Result<Vec<u8>, EvidentError> {
+        use tss_esapi::structures::Public;
+
         let (ak_loaded_public, _, _) =
             context.execute_without_session(|ctx| ctx.read_public(ak_handle))?;
         let attrs = ak_loaded_public.object_attributes();
@@ -262,6 +264,11 @@ impl Ec2TpmWrapper {
     where
         F: FnOnce(&mut Context) -> Result<R, EvidentError>,
     {
+        use tss_esapi::{
+            constants::SessionType, handles::SessionHandle,
+            interface_types::algorithm::HashingAlgorithm, structures::SymmetricDefinition,
+        };
+
         debug!("Creating a new session for the provided operation...");
         let session = context.start_auth_session(
             None,
@@ -279,13 +286,9 @@ impl Ec2TpmWrapper {
         context.clear_sessions();
         debug!("All sessions ended in the TPM context");
 
-        if let Some(auth_session) = session {
-            let session_handle: SessionHandle = auth_session.into();
-            context.flush_context(session_handle.into())?;
-            debug!(
-                "Session handle flushed from TPM context: {:?}",
-                auth_session
-            );
+        if let Some(s) = session {
+            let h: SessionHandle = s.into();
+            context.flush_context(h.into())?;
         }
 
         result
@@ -297,6 +300,12 @@ impl SoftwareEvidenceCollector for Ec2TpmWrapper {
         &self,
         user_data: [u8; 32],
     ) -> Result<SoftwareEvidence, EvidentError> {
+        use tss_esapi::{
+            interface_types::algorithm::{HashingAlgorithm, SignatureSchemeAlgorithm},
+            structures::{Data, PcrSelectionListBuilder, SignatureScheme},
+            traits::Marshall,
+        };
+
         debug!("Starting software evidence collection...");
 
         let pcr_selection_list = PcrSelectionListBuilder::new()
@@ -375,6 +384,8 @@ impl SoftwareEvidenceCollector for Ec2TpmWrapper {
     }
 
     fn get_ek_pub_key(&self) -> Result<Vec<u8>, EvidentError> {
+        use tss_esapi::structures::Public;
+
         let mut context_guard = self.context.lock().map_err(|_| {
             AttestationError::LockError(
                 "could not obtain lock for using context, possibly another thread panicked while holding the lock".to_string(),
@@ -433,29 +444,301 @@ impl SoftwareEvidenceCollector for Ec2TpmWrapper {
         credential_blob: Vec<u8>,
         encrypted_secret: Vec<u8>,
     ) -> Result<Vec<u8>, EvidentError> {
-        let mut context_guard = self
+        use tss_esapi::{
+            attributes::SessionAttributesBuilder,
+            constants::SessionType,
+            handles::{AuthHandle, SessionHandle},
+            interface_types::{
+                algorithm::HashingAlgorithm,
+                session_handles::{AuthSession, PolicySession},
+            },
+            structures::{Auth, Digest, EncryptedSecret, IdObject, Nonce, SymmetricDefinition},
+        };
+
+        let credential_blob = IdObject::try_from(&credential_blob[2..]).inspect_err(|e| {
+            error!("activate_credential: IdObject::try_from failed: {e:?}");
+        })?;
+        debug!("activate_credential: parsed IdObject ok");
+        let encrypted_secret =
+            EncryptedSecret::try_from(&encrypted_secret[2..]).inspect_err(|e| {
+                error!("activate_credential: EncryptedSecret::try_from failed: {e:?}");
+            })?;
+        debug!("activate_credential: parsed EncryptedSecret ok");
+
+        let mut context = self
             .context
             .lock()
-            .map_err(|e| {
-                AttestationError::LockError(format!(
-                    "could not obtain lock for using context, possibly another thread panicked while holding the lock: {e}"
-                ))
+            .map_err(|_|{
+                error!("activate_credential: context lock poisoned");
+                AttestationError::LockError("could not obtain lock for using context, possibly another thread panicked while holding the lock".to_string())
             })?;
+        debug!("activate_credential: acquired context lock");
 
-        let secret = Self::with_new_session(&mut context_guard, |context| {
-            let id_object = IdObject::try_from(credential_blob)?;
-            let encrypted_secret = EncryptedSecret::try_from(encrypted_secret)?;
+        context
+            .tr_set_auth(self.ek_handle.into(), Auth::default())
+            .inspect_err(|e| {
+                error!("activate_credential: tr_set_auth(EK) failed: {e:?}");
+            })?;
+        debug!("activate_credential: tr_set_auth(EK) ok");
+        context
+            .tr_set_auth(self.ak_handle.into(), Auth::default())
+            .inspect_err(|e| {
+                error!("activate_credential: tr_set_auth(AK) failed: {e:?}");
+            })?;
+        debug!("activate_credential: tr_set_auth(AK) ok");
 
-            Ok(context.activate_credential(
-                self.ak_handle,
-                self.ek_handle,
-                id_object,
-                encrypted_secret,
-            )?)
-        })?;
+        // let session1 = context.start_auth_session(
+        //     None,
+        //     None,
+        //     None,
+        //     SessionType::Hmac,
+        //     SymmetricDefinition::AES_256_CFB,
+        //     HashingAlgorithm::Sha256,
+        // )?;
 
-        Ok(secret.value().to_vec())
+        // let session2 = context.start_auth_session(
+        //     None,
+        //     None,
+        //     None,
+        //     SessionType::Policy,
+        //     SymmetricDefinition::AES_256_CFB,
+        //     HashingAlgorithm::Sha384, // must match the EK's name algorithm
+        // )?;
+
+        debug!(
+            "activate_credential: calling ActivateCredential (activateHandle=AK {:?}, keyHandle=EK {:?}, shandle1=Password, shandle2=policy, shandle3=enc)",
+            self.ak_handle, self.ek_handle,
+        );
+        let cert_info: Digest = context
+            .execute_with_sessions(
+                (
+                    Some(AuthSession::Password), // shandle1: AK auth
+                    Some(AuthSession::Password), // shandle2: EK auth
+                    None,
+                ),
+                |ctx| {
+                    ctx.activate_credential(
+                        self.ak_handle,
+                        self.ek_handle,
+                        credential_blob,
+                        encrypted_secret,
+                    )
+                },
+            )
+            .inspect_err(|e| {
+                error!("activate_credential: Esys_ActivateCredential failed: {e:?}");
+            })?;
+        debug!(
+            "activate_credential: ActivateCredential ok; certInfo={} bytes",
+            cert_info.value().len(),
+        );
+
+        debug!("activate_credential: exit ok");
+        Ok(cert_info.value().to_vec())
     }
+
+    // fn activate_credential(
+    //     &self,
+    //     credential_blob: Vec<u8>,
+    //     encrypted_secret: Vec<u8>,
+    // ) -> Result<Vec<u8>, EvidentError> {
+    //     use tss_esapi::{
+    //         constants::SessionType,
+    //         handles::{AuthHandle, SessionHandle},
+    //         interface_types::{algorithm::HashingAlgorithm, session_handles::PolicySession},
+    //         structures::{EncryptedSecret, IdObject, SymmetricDefinition},
+    //     };
+
+    //     let mut context = self
+    //         .context
+    //         .lock()
+    //         .map_err(|e| AttestationError::LockError(format!("could not obtain lock for using context, possibly another thread panicked while holding the lock: {e}")))?;
+
+    //     // The caller already gives us TPM-native byte representations.
+    //     let credential_blob = IdObject::try_from(credential_blob)?;
+    //     let encrypted_secret = EncryptedSecret::try_from(encrypted_secret)?;
+
+    //     // Your AK was created with user_with_auth=true but with empty auth, so make that explicit.
+    //     // context.tr_set_auth(self.ak_handle.into(), Default::default())?;
+    //     // context.tr_set_auth(self.ek_handle.into(), Default::default())?;
+
+    //     // Session 1 authorizes the first handle of ActivateCredential: the AK.
+    //     let ak_auth_session = context.start_auth_session(
+    //         None,
+    //         None,
+    //         None,
+    //         SessionType::Hmac,
+    //         SymmetricDefinition::AES_256_CFB,
+    //         HashingAlgorithm::Sha256,
+    //     )?;
+
+    //     // Session 2 authorizes the second handle of ActivateCredential: the EK.
+    //     //
+    //     // IMPORTANT: for the NitroTPM ECC EK at 0x81010016, the policy digest is SHA384-sized,
+    //     // so the policy session must also be SHA384.
+    //     let ek_policy_session = context.start_auth_session(
+    //         None,
+    //         None,
+    //         None,
+    //         SessionType::Policy,
+    //         SymmetricDefinition::AES_256_CFB,
+    //         HashingAlgorithm::Sha384,
+    //     )?;
+
+    //     let result = (|| -> Result<Vec<u8>, EvidentError> {
+    //         let policy_session = ek_policy_session.ok_or_else(|| {
+    //             AttestationError::CodecError("failed to create EK policy session".to_string())
+    //         })?;
+
+    //         context.set_sessions((ak_auth_session, ek_policy_session, None));
+
+    //         context.policy_secret(
+    //             PolicySession::try_from(policy_session)?,
+    //             AuthHandle::Endorsement,
+    //             Default::default(),
+    //             Default::default(),
+    //             Default::default(),
+    //             None,
+    //         )?;
+
+    //         let cert_info = context.activate_credential(
+    //             self.ak_handle,
+    //             self.ek_handle,
+    //             credential_blob,
+    //             encrypted_secret,
+    //         )?;
+
+    //         Ok(cert_info.value().to_vec())
+    //     })();
+
+    //     context.clear_sessions();
+
+    //     if let Some(s) = ak_auth_session {
+    //         let h: SessionHandle = s.into();
+    //         context.flush_context(h.into())?;
+    //     }
+
+    //     if let Some(s) = ek_policy_session {
+    //         let h: SessionHandle = s.into();
+    //         context.flush_context(h.into())?;
+    //     }
+
+    //     result
+    // }
+
+    // fn activate_credential(
+    //     &self,
+    //     credential_blob: Vec<u8>,
+    //     encrypted_secret: Vec<u8>,
+    // ) -> Result<Vec<u8>, EvidentError> {
+    //     let mut context_guard = self
+    //         .context
+    //         .lock()
+    //         .map_err(|e| {
+    //             AttestationError::LockError(format!(
+    //                 "could not obtain lock for using context, possibly another thread panicked while holding the lock: {e}"
+    //             ))
+    //         })?;
+
+    //     fn strip_outer_tpm2b(buf: &[u8]) -> Result<&[u8], EvidentError> {
+    //         if buf.len() < 2 {
+    //             return Err(AttestationError::CodecError(
+    //                 "TPM2B buffer too short for size prefix".to_string(),
+    //             )
+    //             .into());
+    //         }
+
+    //         let inner_len = u16::from_be_bytes([buf[0], buf[1]]) as usize;
+
+    //         if buf.len() != 2 + inner_len {
+    //             return Err(AttestationError::CodecError(format!(
+    //                 "TPM2B size mismatch: prefix says {inner_len}, total buffer is {}",
+    //                 buf.len()
+    //             ))
+    //             .into());
+    //         }
+
+    //         Ok(&buf[2..])
+    //     }
+
+    //     // Go MakeCredential returns full TPM2B blobs; tss-esapi wants the inner payload.
+    //     let id_object = IdObject::try_from(strip_outer_tpm2b(&credential_blob)?.to_vec())?;
+    //     let enc_secret = EncryptedSecret::try_from(strip_outer_tpm2b(&encrypted_secret)?.to_vec())?;
+
+    //     // Session 1: HMAC auth for AK (activateHandle)
+    //     let ak_auth_session = context_guard
+    //         .start_auth_session(
+    //             None,
+    //             None,
+    //             None,
+    //             SessionType::Hmac,
+    //             SymmetricDefinition::Null,
+    //             HashingAlgorithm::Sha256,
+    //         )?
+    //         .ok_or_else(|| {
+    //             EvidentError::AttestationError(AttestationError::CodecError(
+    //                 "failed to create AK auth session".to_string(),
+    //             ))
+    //         })?;
+
+    //     // Make absolutely sure the AK auth is the empty default.
+    //     context_guard.tr_set_auth(
+    //         self.ak_handle.into(),
+    //         tss_esapi::structures::Auth::default(),
+    //     )?;
+
+    //     // Session 2: policy session for EK (keyHandle)
+    //     let policy_auth_session = context_guard
+    //         .start_auth_session(
+    //             None,
+    //             None,
+    //             None,
+    //             SessionType::Policy,
+    //             SymmetricDefinition::Null,
+    //             HashingAlgorithm::Sha384,
+    //         )?
+    //         .ok_or_else(|| {
+    //             EvidentError::AttestationError(AttestationError::CodecError(
+    //                 "failed to create EK policy session".to_string(),
+    //             ))
+    //         })?;
+
+    //     let policy_session = PolicySession::try_from(policy_auth_session)?;
+
+    //     let policy_result = context_guard.execute_with_nullauth_session(|ctx| {
+    //         ctx.policy_secret(
+    //             policy_session,
+    //             AuthHandle::Endorsement,
+    //             Default::default(),
+    //             Default::default(),
+    //             Default::default(),
+    //             None,
+    //         )
+    //     });
+
+    //     if let Err(e) = policy_result {
+    //         let _ = context_guard.flush_context(SessionHandle::from(ak_auth_session).into());
+    //         let _ = context_guard.flush_context(SessionHandle::from(policy_auth_session).into());
+    //         return Err(EvidentError::from(e));
+    //     }
+
+    //     let result = context_guard.execute_with_sessions(
+    //         (Some(ak_auth_session), Some(policy_auth_session), None),
+    //         |ctx| {
+    //             ctx.activate_credential(
+    //                 self.ak_handle.into(),
+    //                 self.ek_handle.into(),
+    //                 id_object,
+    //                 enc_secret,
+    //             )
+    //         },
+    //     );
+
+    //     let _ = context_guard.flush_context(SessionHandle::from(ak_auth_session).into());
+    //     let _ = context_guard.flush_context(SessionHandle::from(policy_auth_session).into());
+
+    //     Ok(result?.value().to_vec())
+    // }
 }
 
 fn ecdsa_signature(input: &[u8]) -> IResult<&[u8], ecdsa::Signature> {
@@ -503,4 +786,77 @@ fn ecdsa_signature(input: &[u8]) -> IResult<&[u8], ecdsa::Signature> {
             nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::MapRes))
         })?;
     Ok((input, signature))
+}
+
+fn is_valid_credential_blob(blob: Vec<u8>) -> bool {
+    if blob.len() < 5 {
+        return false;
+    }
+
+    let outer_size = u16::from_be_bytes([blob[0], blob[1]]) as usize;
+    if outer_size != blob.len() - 2 {
+        return false;
+    }
+
+    let hmac_size = u16::from_be_bytes([blob[2], blob[3]]) as usize;
+
+    if hmac_size == 0 {
+        return false;
+    }
+
+    if 4 + hmac_size > blob.len() {
+        return false;
+    }
+
+    let enc_identity_len = blob.len() - (4 + hmac_size);
+    if enc_identity_len == 0 {
+        return false;
+    }
+
+    true
+}
+
+fn is_valid_encrypted_secret_ecc(secret: Vec<u8>) -> bool {
+    if secret.len() < 8 {
+        return false;
+    }
+
+    let outer_size = u16::from_be_bytes([secret[0], secret[1]]) as usize;
+    if outer_size != secret.len() - 2 {
+        return false;
+    }
+
+    let x_size = u16::from_be_bytes([secret[2], secret[3]]) as usize;
+    if x_size == 0 {
+        return false;
+    }
+
+    let x_end = 4 + x_size;
+    if x_end + 2 > secret.len() {
+        return false;
+    }
+
+    let y_size = u16::from_be_bytes([secret[x_end], secret[x_end + 1]]) as usize;
+    if y_size == 0 {
+        return false;
+    }
+
+    let y_end = x_end + 2 + y_size;
+    if y_end != secret.len() {
+        return false;
+    }
+
+    true
+}
+
+fn is_valid_encrypted_secret_ecc_p384(secret: Vec<u8>) -> bool {
+    if !is_valid_encrypted_secret_ecc(secret.clone()) {
+        return false;
+    }
+
+    let x_size = u16::from_be_bytes([secret[2], secret[3]]) as usize;
+    let x_end = 4 + x_size;
+    let y_size = u16::from_be_bytes([secret[x_end], secret[x_end + 1]]) as usize;
+
+    x_size == 48 && y_size == 48
 }

@@ -68,13 +68,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     collectors::initialize().await?;
 
-    let attester_service = AttesterService::new(instance_pub_key);
+    let attester_service = AttesterService::new(instance_pub_key, instance_certificate.clone());
 
     let attester_service_handler = AttesterServiceHandler::new(
         attester_service,
         instance_pub_key,
         instance_private_key,
-        instance_certificate,
+        instance_certificate.clone(),
     );
 
     let server_router = Server::builder()

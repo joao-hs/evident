@@ -32,7 +32,10 @@ func TestRSARoundTrip(t *testing.T) {
 	binary.BigEndian.PutUint16(name, 0x000B) // TPM_ALG_SHA256
 	rand.Read(name[2:])
 
-	params := DefaultParams()
+	params := Params{
+		HashAlg:    crypto.SHA256,
+		SymKeyBits: 128,
+	}
 
 	// --- MakeCredential ---
 	result, err := RSA(ekPub, credential, name, params)
@@ -112,7 +115,10 @@ func TestECCRoundTrip(t *testing.T) {
 	binary.BigEndian.PutUint16(name, 0x000B)
 	rand.Read(name[2:])
 
-	params := DefaultParams()
+	params := Params{
+		HashAlg:    crypto.SHA256,
+		SymKeyBits: 128,
+	}
 
 	// --- MakeCredential ---
 	result, err := ECC(ekPub, credential, name, params)
@@ -271,7 +277,10 @@ func TestWrongNameFails(t *testing.T) {
 	binary.BigEndian.PutUint16(correctName, 0x000B)
 	rand.Read(correctName[2:])
 
-	params := DefaultParams()
+	params := Params{
+		HashAlg:    crypto.SHA256,
+		SymKeyBits: 128,
+	}
 	result, err := RSA(ekPub, credential, correctName, params)
 	if err != nil {
 		t.Fatal(err)

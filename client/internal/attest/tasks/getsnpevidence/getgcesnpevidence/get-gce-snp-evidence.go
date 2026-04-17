@@ -122,7 +122,7 @@ func Task(ctx context.Context, input Input) (Output, error) {
 	// infer model from VCEK certificate
 	// TODO: ideally, we would infer the model from the SNP evidence itself
 	{
-		model, err := getsnpevidencesubtasks.ExtractModelFromVcekCertIssuer(output.Vcek)
+		model, err := getsnpevidencesubtasks.ExtractModelFromCertIssuer(output.Vcek)
 		if err != nil {
 			return zeroOutput, fmt.Errorf("error while extracting model from VCEK certificate: %w", err)
 		}
