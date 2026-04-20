@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func FetchAdditionalArtifactsBundle(ctx context.Context, client *grpc.Client) (*pb.AdditionalArtifactsBundle, error) {
+func FetchAdditionalArtifactsBundle(ctx context.Context, client *grpc.AttesterServiceClient) (*pb.AdditionalArtifactsBundle, error) {
 	var (
 		ok  bool
 		err error

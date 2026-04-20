@@ -1,7 +1,8 @@
 use common_core::constants;
 use nix::unistd::{Gid, Uid, chown};
 use rcgen::{
-    CertificateParams, DistinguishedName, DnType, KeyPair, PKCS_ECDSA_P384_SHA384, PublicKeyData,
+    BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair,
+    PKCS_ECDSA_P384_SHA384, PublicKeyData,
 };
 use std::{
     fs,
@@ -59,13 +60,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             0o400,
         )?;
 
-        // Generate a self-signed X.509 certificate with CN=evident-server, valid for 3650 days
+        // Generate a self-signed X.509 certificate with CN=instance-root-ca, valid for 3650 days
         let mut params = CertificateParams::new(Vec::<String>::new())?;
         let mut dn = DistinguishedName::new();
-        dn.push(DnType::CommonName, "evident-server");
+        dn.push(DnType::CommonName, "instance-root-ca");
         params.distinguished_name = dn;
         params.not_before = OffsetDateTime::now_utc();
         params.not_after = params.not_before + Duration::days(3650);
+        params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
 
         let cert = params.self_signed(&grpc_key)?;
         write_file(

@@ -93,7 +93,7 @@ func (v *verifier) attestSNPEC2(targetAddr netip.Addr, targetPort uint16, optCpu
 		log.Get().Debugf("Using gRPC server certificate from additional artifacts bundle for TLS connection")
 	}
 
-	client, err := grpc.NewClient(&cfg)
+	client, err := grpc.NewAttesterServiceClient(&cfg)
 	if err != nil {
 		return err
 	}
@@ -115,7 +115,7 @@ func (v *verifier) attestSNPGCE(targetAddr netip.Addr, targetPort uint16, optCpu
 		log.Get().Debugf("Using gRPC server certificate from additional artifacts bundle for TLS connection")
 	}
 
-	client, err := grpc.NewClient(&cfg)
+	client, err := grpc.NewAttesterServiceClient(&cfg)
 	if err != nil {
 		return err
 	}

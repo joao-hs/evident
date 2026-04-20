@@ -23,7 +23,7 @@ import (
 
 func RunSnpGceAttestationWorkflow(
 	ctx context.Context,
-	client *grpc.Client,
+	client *grpc.AttesterServiceClient,
 	optCpuCount *uint8,
 	optExpectedPCRs *domain.ExpectedPcrDigests,
 	optPkgs packager.Packages,

@@ -15,7 +15,7 @@ import (
 
 func FetchEvidenceBundle(
 	ctx context.Context,
-	client *grpc.Client,
+	client *grpc.AttesterServiceClient,
 	request *pb.GetEvidenceRequest,
 	expectedSigningKeyCertificate *x509.Certificate,
 ) (*pb.EvidenceBundle, error) {

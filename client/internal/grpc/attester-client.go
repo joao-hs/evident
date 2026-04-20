@@ -9,30 +9,30 @@ import (
 	"google.golang.org/grpc"
 )
 
-type Client struct {
+type AttesterServiceClient struct {
 	conn   *grpc.ClientConn
 	client pb.AttesterServiceClient
 	cfg    *config.Config
 }
 
-func NewClient(cfg *config.Config) (*Client, error) {
+func NewAttesterServiceClient(cfg *config.Config) (*AttesterServiceClient, error) {
 	clientConn, err := grpc.NewClient(cfg.Addr, defaultDialOptions(cfg)...)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Client{
+	return &AttesterServiceClient{
 		conn:   clientConn,
 		client: pb.NewAttesterServiceClient(clientConn),
 		cfg:    cfg,
 	}, nil
 }
 
-func (c *Client) Close() error {
+func (c *AttesterServiceClient) Close() error {
 	return c.conn.Close()
 }
 
-func (c *Client) GetEvidence(ctx context.Context, req *pb.GetEvidenceRequest) (*pb.SignedEvidenceBundle, error) {
+func (c *AttesterServiceClient) GetEvidence(ctx context.Context, req *pb.GetEvidenceRequest) (*pb.SignedEvidenceBundle, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.cfg.Timeout)
 	defer cancel()
 
@@ -44,7 +44,7 @@ func (c *Client) GetEvidence(ctx context.Context, req *pb.GetEvidenceRequest) (*
 	return nil, err
 }
 
-func (c *Client) GetAdditionalArtifacts(ctx context.Context, req *pb.GetAdditionalArtifactsRequest) (*pb.SignedAdditionalArtifactsBundle, error) {
+func (c *AttesterServiceClient) GetAdditionalArtifacts(ctx context.Context, req *pb.GetAdditionalArtifactsRequest) (*pb.SignedAdditionalArtifactsBundle, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.cfg.Timeout)
 	defer cancel()
 

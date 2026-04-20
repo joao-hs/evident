@@ -39,3 +39,22 @@ func TargetPort(targetPortStr string) (uint16, error) {
 	}
 	return port, nil
 }
+
+func Target(targetStr string) (netip.AddrPort, error) {
+	host, port, err := net.SplitHostPort(targetStr)
+	if err != nil {
+		return netip.AddrPort{}, fmt.Errorf("invalid target format: %v", err)
+	}
+
+	ip, err := TargetIP(host)
+	if err != nil {
+		return netip.AddrPort{}, err
+	}
+
+	portNum, err := TargetPort(port)
+	if err != nil {
+		return netip.AddrPort{}, err
+	}
+
+	return netip.AddrPortFrom(ip, portNum), nil
+}

@@ -15,7 +15,7 @@ import (
 )
 
 type Input struct {
-	Client                       *grpc.Client
+	Client                       *grpc.AttesterServiceClient
 	OptAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle
 }
 
@@ -181,6 +181,6 @@ func Task(ctx context.Context, input Input) (Output, error) {
 }
 
 // fetchAdditionalArtifactsBundle requests the additional artifacts bundle from the server, verifies its signature, and returns the unmarshaled additional artifacts bundle.
-func fetchAdditionalArtifactsBundle(ctx context.Context, client *grpc.Client) (*pb.AdditionalArtifactsBundle, error) {
+func fetchAdditionalArtifactsBundle(ctx context.Context, client *grpc.AttesterServiceClient) (*pb.AdditionalArtifactsBundle, error) {
 	return getsnpevidencesubtasks.FetchAdditionalArtifactsBundle(ctx, client)
 }

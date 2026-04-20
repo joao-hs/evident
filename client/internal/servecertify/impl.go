@@ -5,11 +5,13 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"math/big"
 	"net"
 	"net/netip"
+	"os/exec"
 	"time"
 
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest"
@@ -26,6 +28,8 @@ type certificateIssuerVerifierServiceImpl struct {
 
 	caCerts []*x509.Certificate
 	caKey   *ecdsa.PrivateKey
+
+	gpgCmd string
 }
 
 func NewCertificateIssuerVerifierServiceImpl(caCerts []*x509.Certificate, caKey *ecdsa.PrivateKey) pb.CertificateIssuerVerifierServiceServer {
@@ -35,8 +39,34 @@ func NewCertificateIssuerVerifierServiceImpl(caCerts []*x509.Certificate, caKey 
 	}
 }
 
-func (c *certificateIssuerVerifierServiceImpl) SubmitTrustedPackage(ctx context.Context, request *pb.Package) (*pb.SignedPackageSubmissionResult, error) {
-	return nil, fmt.Errorf("not implemented")
+func (c *certificateIssuerVerifierServiceImpl) checkRequiredExternalCommands() error {
+	var err error
+
+	c.gpgCmd, err = exec.LookPath("gpg")
+	if err != nil {
+		return fmt.Errorf("`gpg` command is not present in PATH")
+	}
+
+	return nil
+}
+
+func (c *certificateIssuerVerifierServiceImpl) SubmitTrustedPackage(ctx context.Context, request *pb.MinimalPackage) (*pb.SignedPackageSubmissionResult, error) {
+	var err error
+
+	// 1. Unmarshal expected measurements
+	expectedPcrDigests := domain.ExpectedPcrDigests{}
+	err = json.Unmarshal(request.SerializedExpectedMeasurements, &expectedPcrDigests)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal expected measurements: %w", err)
+	}
+
+	finalExpectedDigest, err := expectedPcrDigests.ComputeExpectedDigest(domain.ENUM_HASH_ALGORITHM_SHA256)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute expected digest from expected measurements: %w", err)
+	}
+
+	_ = fmt.Sprintf("/tmp/evident/trusted-packages/%s.package/", finalExpectedDigest)
+	return nil, fmt.Errorf("not implemented yet")
 }
 
 func (c *certificateIssuerVerifierServiceImpl) RequestInstanceKeyAttestationCertificate(ctx context.Context, request *pb.SignedAdditionalArtifactsBundle) (*pb.SignedCertificateChain, error) {

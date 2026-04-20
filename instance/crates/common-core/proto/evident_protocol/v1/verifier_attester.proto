@@ -62,8 +62,10 @@ message AdditionalArtifactsBundle {
   optional Certificate grpc_server_certificate = 5; // since this is signed, it will bind to the instance key
 }
 
-message Package {
-  bytes tarball = 1; // .tar.gz file containing the package contents
+message MinimalPackage {
+  bytes serialized_manifest = 1;
+  bytes serialized_expected_measurements = 2;
+  repeated bytes serialized_manifest_signature = 3;
 }
 
 message PackageSubmissionResult {
@@ -94,6 +96,6 @@ service AttesterService {
 }
 
 service CertificateIssuerVerifierService {
-  rpc SubmitTrustedPackage(Package) returns (SignedPackageSubmissionResult);
+  rpc SubmitTrustedPackage(MinimalPackage) returns (SignedPackageSubmissionResult);
   rpc RequestInstanceKeyAttestationCertificate(SignedAdditionalArtifactsBundle) returns (SignedCertificateChain);
 }
