@@ -37,3 +37,6 @@ rustls = { workspace = true }
 tokio-rustls = { workspace = true }
 tower = { workspace = true }
 hyper-util = { workspace = true }
+
+[profile.release]
+debug = true

@@ -24,6 +24,17 @@
           mkBundle = inputs.evident-instance.apps.x86_64-linux.mkBundle;
         in
         {
+          profiling = pkgs.callPackage ./src {
+            platform = "gce";
+            inherit inputs;
+            evidentInstancePackage = mkBundle {
+              mandatoryFeature = "snp_gce";
+              optionalFeatures = [ "debug" ];
+              certificateIssuerEndpoint = "evident-ca.joaohs.com:5010";
+            };
+            withDebug = true;
+            withProfiling = true;
+          };
           gce-base = pkgs.callPackage ./src {
             platform = "gce";
             inherit inputs;
@@ -31,7 +42,7 @@
               mandatoryFeature = "snp_gce";
               optionalFeatures = [
                 "debug"
-                "request_certificate"
+                # "request_certificate"
               ];
               certificateIssuerEndpoint = "evident-ca.joaohs.com:5010";
             };
@@ -44,11 +55,12 @@
               mandatoryFeature = "snp_ec2";
               optionalFeatures = [
                 "debug"
-                "request_certificate"
+                # "request_certificate"
               ];
               certificateIssuerEndpoint = "evident-ca.joaohs.com:5010";
             };
             withDebug = true;
+            withProfiling = true;
           };
         };
       };

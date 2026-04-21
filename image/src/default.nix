@@ -4,6 +4,7 @@
   lib,
   platform,
   withDebug ? false,
+  withProfiling ? false,
   evidentInstancePackage,
   ...
 }:
@@ -32,7 +33,8 @@ in
       "${modulesPath}/image/repart.nix"
       "${modulesPath}/system/boot/uki.nix"
       ./platform-specific/${platform}.nix
-    ] ++ lib.optionals withDebug [ ./debug/debug.nix ];
+    ] ++ lib.optionals withDebug [ ./debug/debug.nix ]
+      ++ lib.optionals withProfiling [ ./profiling/profiling.nix ];
 
   }
 )).image.overrideAttrs
