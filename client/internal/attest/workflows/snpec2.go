@@ -35,8 +35,6 @@ func RunSnpEc2AttestationWorkflow(
 		getamdtrustedcertsOutput   getamdtrustedcerts.Output
 		getendorsedartifactsOutput getec2endorsedartifacts.Output
 	)
-	instanceID := "i-0cd5c8b42e1e57281"
-	optInstanceID = &instanceID
 
 	if (optExpectedPCRs == nil && optPkgs == nil) || (optExpectedPCRs != nil && optPkgs != nil) {
 		return fmt.Errorf("invalid workflow options: either expected PCR digests or trusted packages must be provided, but not both")

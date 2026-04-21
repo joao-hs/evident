@@ -188,7 +188,7 @@ func ValidateAdditionalArtifactsBundle(
 			err = fmt.Errorf("error while storing make credential input bundle from additional artifacts bundle in dotevident: %w", err)
 			return
 		}
-		fmt.Printf("Stored make credential input bundle from additional artifacts bundle in dotevident with path: %s\n", path)
+		log.Get().Debugf("Stored make credential input bundle from additional artifacts bundle in dotevident with path: %s\n", path)
 	}
 
 	// Instance CSR: optional, but if present, must match instance key certificate
