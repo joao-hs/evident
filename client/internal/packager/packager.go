@@ -15,6 +15,7 @@ import (
 
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/build"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/domain"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/measure"
 )
 
@@ -99,7 +100,7 @@ func (p *packager) GetEquivalentCommands(flakePath string, variation string, out
 func (p *packager) Package(flakePath string, variation string, outputDirPath string, repoUrl string, commitHash string) error {
 	var err error
 
-	tmpOutputDirPath := "/tmp/evident-packaging-output" + fmt.Sprintf("%d", os.Getpid())
+	tmpOutputDirPath := "/tmp/evident/evident-packaging-output" + fmt.Sprintf("%d", os.Getpid())
 
 	err = os.MkdirAll(tmpOutputDirPath, 0755)
 	if err != nil {
@@ -109,6 +110,7 @@ func (p *packager) Package(flakePath string, variation string, outputDirPath str
 	}
 
 	// 1. build image to outputDirPath/disk.raw
+	log.Get().Infoln("Building VM image...")
 	err = p.vmImageBuilder.BuildImage(
 		flakePath,
 		variation,
@@ -119,6 +121,7 @@ func (p *packager) Package(flakePath string, variation string, outputDirPath str
 	}
 
 	// 2. measure image and write expected PCRs to outputDirPath/expected-pcrs.json
+	log.Get().Infoln("Measuring VM image...")
 	expectedPcrs, err := p.vmImageMeasurer.MeasureImage(
 		filepath.Join(tmpOutputDirPath, "disk.raw"),
 	)
@@ -141,7 +144,7 @@ func (p *packager) Package(flakePath string, variation string, outputDirPath str
 	}
 
 	// 3. create and save manifest file to outputDirPath/MANIFEST
-
+	log.Get().Infoln("Creating manifest file...")
 	nixVersion, err := p.getNixVersion()
 	if err != nil {
 		return err
@@ -205,6 +208,7 @@ func (p *packager) Package(flakePath string, variation string, outputDirPath str
 	}
 
 	// 4. sign manifest file and save the signature to outputDirPath/<signing-pub-key-id>.sig.asc
+	log.Get().Infof("Signing manifest file with key %s...", p.keyId)
 	signatureFilePath := filepath.Join(tmpOutputDirPath, fmt.Sprintf("%s.sig.asc", p.keyId))
 	signCmd := exec.Command(p.gpgCmd, "--output", signatureFilePath, "--local-user", p.keyId, "--armor", "--detach-sign", manifestFilePath)
 	var signStderr bytes.Buffer
@@ -224,7 +228,6 @@ func (p *packager) Package(flakePath string, variation string, outputDirPath str
 	 */
 
 	// 5. move the contents of tmpOutputDirPath and save to outputDirPath/{final-pcr-digest}.package
-
 	/*
 	 *	outputDirPath/{final-pcr-digest}.package/
 	 *	├── disk.raw
@@ -243,6 +246,7 @@ func (p *packager) Package(flakePath string, variation string, outputDirPath str
 	}
 	packageDirName := fmt.Sprintf("%s.package", digest)
 	packageDirPath := filepath.Join(outputDirPath, packageDirName)
+	log.Get().Infoln("Packaging files")
 	err = os.MkdirAll(packageDirPath, 0755)
 	if err != nil {
 		return fmt.Errorf("failed to create package directory: %v", err)
@@ -277,6 +281,7 @@ func (p *packager) Package(flakePath string, variation string, outputDirPath str
 		}
 	}
 
+	log.Get().Infoln("Package created at", packageDirPath)
 	return nil
 }
 
