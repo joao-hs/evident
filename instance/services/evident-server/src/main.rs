@@ -1,5 +1,5 @@
 use crate::{
-    handlers::attester_service_handler::AttesterServiceHandler,
+    handlers::attester_service_handler::{AttesterServiceHandler, attach_request_id},
     services::attester_service::AttesterService,
 };
 use common_core::{
@@ -33,7 +33,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         LevelFilter::Info
     };
 
-    env_logger::Builder::new().filter_level(log_level).init();
+    env_logger::Builder::new()
+        .filter_level(log_level)
+        .format_timestamp_millis()
+        .init();
 
     if target_info::DEBUG {
         log::debug!("Debug mode is enabled");
@@ -77,9 +80,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         instance_certificate.clone(),
     );
 
-    let server_router = Server::builder()
-        .tls_config(tls)?
-        .add_service(AttesterServiceServer::new(attester_service_handler));
+    let server_router =
+        Server::builder()
+            .tls_config(tls)?
+            .add_service(AttesterServiceServer::with_interceptor(
+                attester_service_handler,
+                attach_request_id,
+            ));
 
     let running_server = server_router.serve(
         format!("0.0.0.0:{}", constants::EVIDENT_SERVER_PORT)
