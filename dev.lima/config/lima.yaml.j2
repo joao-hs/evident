@@ -3,7 +3,9 @@ mounts:
     mountPoint: /home/debian/project
     writable: true
 cpus: 4       # default
-memory: 4GiB  # default
-disk: 50GiB   # default
+memory: 6GiB  # default
+disk: 150GiB   # default
 base:
   - ./base.yaml
+param:
+  arch: "{{ arch }}"
