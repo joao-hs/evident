@@ -24,7 +24,7 @@
           mkBundle = inputs.evident-instance.apps.x86_64-linux.mkBundle;
         in
         {
-          profiling = pkgs.callPackage ./src {
+          gce-profiling = pkgs.callPackage ./src {
             platform = "gce";
             inherit inputs;
             evidentInstancePackage = mkBundle {
@@ -47,6 +47,17 @@
               certificateIssuerEndpoint = "evident-ca.joaohs.com:5010";
             };
             withDebug = true;
+          };
+          ec2-profiling = pkgs.callPackage ./src {
+            platform = "ec2";
+            inherit inputs;
+            evidentInstancePackage = mkBundle {
+              mandatoryFeature = "snp_ec2";
+              optionalFeatures = [ "debug" ];
+              certificateIssuerEndpoint = "evident-ca.joaohs.com:5010";
+            };
+            withDebug = true;
+            withProfiling = true;
           };
           ec2-base = pkgs.callPackage ./src {
             platform = "ec2";
