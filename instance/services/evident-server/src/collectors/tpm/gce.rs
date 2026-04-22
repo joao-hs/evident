@@ -384,6 +384,7 @@ impl GceTpmWrapper {
 
 impl SoftwareEvidenceCollector for GceTpmWrapper {
     fn collect_software_evidence(&self, nonce: [u8; 32]) -> Result<SoftwareEvidence, EvidentError> {
+        let instr_collect_start = std::time::Instant::now();
         debug!("Starting software evidence collection...");
 
         let pcr_selection_list = PcrSelectionListBuilder::new()
@@ -394,13 +395,19 @@ impl SoftwareEvidenceCollector for GceTpmWrapper {
         let user_data = Data::try_from(nonce.as_slice())?;
         debug!("Nonce converted to TPM Data structure");
 
+        let instr_wait_start = std::time::Instant::now();
         let mut context_guard = self.context.lock().map_err(|_| {
             AttestationError::LockError(
                 "could not obtain lock for using context, possibly another thread panicked while holding the lock".to_string(),
             )
         })?;
+        debug!(
+            "collect_software_evidence: waited {:?} to acquire context lock",
+            instr_wait_start.elapsed()
+        );
         debug!("Successfully acquired lock on TPM context");
 
+        let instr_session_start = std::time::Instant::now();
         let (attest, tpmt_signature) = Self::with_new_session(&mut context_guard, |context| {
             debug!("Starting TPM quote operation...");
             let result = context.quote(
@@ -409,12 +416,20 @@ impl SoftwareEvidenceCollector for GceTpmWrapper {
                 SignatureScheme::Null,
                 pcr_selection_list,
             )?;
+            debug!(
+                "collect_software_evidence: quote operation took {:?}",
+                instr_session_start.elapsed()
+            );
             debug!("TPM quote operation completed successfully");
             Ok(result)
         })?;
         debug!("Quote and signature obtained from TPM");
 
         drop(context_guard);
+        debug!(
+            "collect_software_evidence: held the lock on TPM context for {:?} during quote operation",
+            instr_wait_start.elapsed()
+        );
         debug!("Released lock on TPM context");
 
         let quoted_data = attest.marshall()?;
@@ -445,7 +460,7 @@ impl SoftwareEvidenceCollector for GceTpmWrapper {
         let signature_bytes = signature.to_der().to_bytes();
 
         debug!("Software evidence collection completed successfully");
-        Ok(SoftwareEvidence::TpmEvidence(Evidence {
+        let ret = SoftwareEvidence::TpmEvidence(Evidence {
             signed_raw: quoted_data,
             signature: signature_bytes.to_vec(),
             signing_key: Some(ProtoPublicKey {
@@ -459,7 +474,12 @@ impl SoftwareEvidenceCollector for GceTpmWrapper {
                 }),
                 key_params: Some(KeyParams::EllipticCurve(EllipticCurve::P256.into())),
             }),
-        }))
+        });
+        debug!(
+            "collect_software_evidence: total completed in {:?}",
+            instr_collect_start.elapsed()
+        );
+        Ok(ret)
     }
 
     fn bind_elements(&self, hasher: &mut dyn DynDigest) {

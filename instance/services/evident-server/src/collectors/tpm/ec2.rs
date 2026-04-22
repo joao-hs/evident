@@ -46,6 +46,8 @@ pub struct Ec2TpmWrapper {
 
     ek_handle: KeyHandle,
     ak_handle: KeyHandle,
+    ek_public_key_spki_bytes: Vec<u8>,
+    ak_key_name: Vec<u8>,
     ak_public_key_spki_bytes: Vec<u8>,
 }
 
@@ -73,6 +75,14 @@ impl Ec2TpmWrapper {
             Self::create_ecc_ak(context, ek_handle)
         })?;
 
+        let ek_public_key_spki_bytes: Vec<u8> = context
+            .execute_without_session(|ctx| Self::get_ek_public_key_spki_bytes(ctx, ek_handle))?;
+
+        let ak_key_name: Vec<u8> = context.execute_without_session(|ctx| {
+            let ak_name = ctx.tr_get_name(ak_handle.into())?;
+            Ok::<Vec<u8>, EvidentError>(ak_name.value().to_vec())
+        })?;
+
         let ak_public_key_spki_bytes: Vec<u8> = Self::with_new_session(&mut context, |context| {
             Self::get_ak_public_key_spki_bytes(context, ak_handle)
         })?;
@@ -82,6 +92,8 @@ impl Ec2TpmWrapper {
             context: Arc::new(Mutex::new(context)),
             ek_handle,
             ak_handle,
+            ek_public_key_spki_bytes,
+            ak_key_name,
             ak_public_key_spki_bytes,
         })
     }
@@ -260,6 +272,42 @@ impl Ec2TpmWrapper {
         }
     }
 
+    fn get_ek_public_key_spki_bytes(
+        context: &mut Context,
+        ek_handle: KeyHandle,
+    ) -> Result<Vec<u8>, EvidentError> {
+        use tss_esapi::structures::Public;
+
+        let (ek_public, _, _) = context.read_public(ek_handle)?;
+        match ek_public {
+            Public::Ecc { unique, .. } => {
+                let public_key_bytes = {
+                    let mut bytes = vec![0x04]; // Uncompressed point indicator
+                    bytes.extend_from_slice(unique.x().value());
+                    bytes.extend_from_slice(unique.y().value());
+                    bytes
+                };
+
+                PublicKey::from_sec1_bytes(&public_key_bytes)
+                    .map_err(|e| {
+                        EvidentError::AttestationError(AttestationError::CodecError(format!(
+                            "failed to parse ecc ek public key bytes: {e}"
+                        )))
+                    })?
+                    .to_public_key_der()
+                    .map(|key| key.to_vec())
+                    .map_err(|e| {
+                        EvidentError::AttestationError(AttestationError::CodecError(format!(
+                            "failed to encode ecc ek public key to der format: {e}"
+                        )))
+                    })
+            }
+            _ => Err(EvidentError::AttestationError(
+                AttestationError::UnexpectedKeyType("loaded EK is not of ECC type".to_string()),
+            )),
+        }
+    }
+
     fn with_new_session<F, R>(context: &mut Context, f: F) -> Result<R, EvidentError>
     where
         F: FnOnce(&mut Context) -> Result<R, EvidentError>,
@@ -306,6 +354,7 @@ impl SoftwareEvidenceCollector for Ec2TpmWrapper {
             traits::Marshall,
         };
 
+        let instr_collect_start = std::time::Instant::now();
         debug!("Starting software evidence collection...");
 
         let pcr_selection_list = PcrSelectionListBuilder::new()
@@ -316,13 +365,19 @@ impl SoftwareEvidenceCollector for Ec2TpmWrapper {
         let user_data = Data::try_from(user_data.as_slice())?;
         debug!("Nonce converted to TPM Data structure");
 
+        let instr_wait_start = std::time::Instant::now();
         let mut context_guard = self.context.lock().map_err(|e| {
             AttestationError::LockError(format!(
                 "could not obtain lock for using context, possibly another thread panicked while holding the lock: {e}"
             ))
         })?;
+        debug!(
+            "collect_software_evidence: waited {:?} to acquire context lock",
+            instr_wait_start.elapsed()
+        );
         debug!("Successfully acquired lock on TPM context");
 
+        let instr_session_start = std::time::Instant::now();
         let (attest, tpmt_signature) = Self::with_new_session(&mut context_guard, |context| {
             debug!("Starting TPM quote operation...");
             let result = context.quote(
@@ -331,12 +386,20 @@ impl SoftwareEvidenceCollector for Ec2TpmWrapper {
                 SignatureScheme::Null,
                 pcr_selection_list,
             )?;
+            debug!(
+                "collect_software_evidence: quote operation took {:?}",
+                instr_session_start.elapsed()
+            );
             debug!("TPM quote operation completed successfully");
             Ok(result)
         })?;
         debug!("Quote and signature obtained from TPM");
 
         drop(context_guard);
+        debug!(
+            "collect_software_evidence: held the lock on TPM context for {:?} during quote operation",
+            instr_wait_start.elapsed()
+        );
         debug!("Released lock on TPM context");
 
         let quoted_data = attest.marshall()?;
@@ -366,7 +429,7 @@ impl SoftwareEvidenceCollector for Ec2TpmWrapper {
         let signature_bytes = signature.to_der().to_bytes();
 
         debug!("Software evidence collection completed successfully");
-        Ok(SoftwareEvidence::TpmEvidence(Evidence {
+        let ret = SoftwareEvidence::TpmEvidence(Evidence {
             signed_raw: quoted_data,
             signature: signature_bytes.to_vec(),
             signing_key: Some(ProtoPublicKey {
@@ -376,7 +439,12 @@ impl SoftwareEvidenceCollector for Ec2TpmWrapper {
                 certificate: None,
                 key_params: Some(KeyParams::EllipticCurve(EllipticCurve::P384.into())),
             }),
-        }))
+        });
+        debug!(
+            "collect_software_evidence: total completed in {:?}",
+            instr_collect_start.elapsed()
+        );
+        Ok(ret)
     }
 
     fn bind_elements(&self, hasher: &mut dyn DynDigest) {
@@ -384,59 +452,11 @@ impl SoftwareEvidenceCollector for Ec2TpmWrapper {
     }
 
     fn get_ek_pub_key(&self) -> Result<Vec<u8>, EvidentError> {
-        use tss_esapi::structures::Public;
-
-        let mut context_guard = self.context.lock().map_err(|_| {
-            AttestationError::LockError(
-                "could not obtain lock for using context, possibly another thread panicked while holding the lock".to_string(),
-            )
-        })?;
-
-        context_guard.execute_without_session(|ctx| {
-            let (ek_public, _, _) = ctx
-                .read_public(self.ek_handle)
-                .map_err(|e| EvidentError::TpmError(TpmError::from(e)))?;
-            match ek_public {
-                Public::Ecc { unique, .. } => {
-                    let public_key_bytes = {
-                        let mut bytes = vec![0x04]; // Uncompressed point indicator
-                        bytes.extend_from_slice(unique.x().value());
-                        bytes.extend_from_slice(unique.y().value());
-                        bytes
-                    };
-
-                    PublicKey::from_sec1_bytes(&public_key_bytes)
-                        .map_err(|e| {
-                            EvidentError::AttestationError(AttestationError::CodecError(format!(
-                                "failed to parse ecc ek public key bytes: {e}"
-                            )))
-                        })?
-                        .to_public_key_der()
-                        .map(|key| key.to_vec())
-                        .map_err(|e| {
-                            EvidentError::AttestationError(AttestationError::CodecError(format!(
-                                "failed to encode ecc ek public key to der format: {e}"
-                            )))
-                        })
-                }
-                _ => Err(EvidentError::AttestationError(
-                    AttestationError::UnexpectedKeyType("loaded EK is not of ECC type".to_string()),
-                )),
-            }
-        })
+        Ok(self.ek_public_key_spki_bytes.clone())
     }
 
     fn get_ak_key_name(&self) -> Result<Vec<u8>, EvidentError> {
-        let mut context_guard = self.context.lock().map_err(|_| {
-            AttestationError::LockError(
-                "could not obtain lock for using context, possibly another thread panicked while holding the lock".to_string(),
-            )
-        })?;
-
-        context_guard.execute_without_session(|ctx| {
-            let ak_name = ctx.tr_get_name(self.ak_handle.into())?;
-            Ok(ak_name.value().to_vec())
-        })
+        Ok(self.ak_key_name.clone())
     }
 
     fn activate_credential(
