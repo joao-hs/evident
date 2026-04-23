@@ -59,7 +59,7 @@ func AttestTargets(ctx context.Context, endpoints map[string]int32, cpuCount uin
 				optEc2InstanceID = &ec2InstanceId
 			}
 
-			err := verifier.Attest(ip, port, &cpuCount, optEc2InstanceID, &expectedPCRs, nil)
+			_, err := verifier.Attest(ip, port, &cpuCount, optEc2InstanceID, &expectedPCRs, nil)
 
 			// ensure that this go routine will not be stuck sending to channel upon context cancellation
 			select {

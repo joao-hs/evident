@@ -42,7 +42,7 @@ type Manifest struct {
 	ImageMeasurementsSha512 string
 }
 
-func Parse(r io.Reader) (*Manifest, error) {
+func ParseManifest(r io.Reader) (*Manifest, error) {
 	m := &Manifest{}
 	seen := make(map[string]bool)
 	scanner := bufio.NewReader(r)

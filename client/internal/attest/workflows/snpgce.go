@@ -18,6 +18,7 @@ import (
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/grpc"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/packager"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/report"
 	pb "gitlab.com/dpss-inesc-id/achilles-cvm/client/pb/evident_protocol/v1"
 )
 
@@ -28,6 +29,7 @@ func RunSnpGceAttestationWorkflow(
 	optExpectedPCRs *domain.ExpectedPcrDigests,
 	optPkgs packager.Packages,
 	optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle,
+	reportInput *report.ReportInput,
 ) error {
 	var (
 		err                        error
@@ -47,7 +49,88 @@ func RunSnpGceAttestationWorkflow(
 		OptAdditionalArtifactsBundle: optAdditionalArtifactsBundle,
 	})
 	if err != nil {
+		reportInput.Q1 = report.CheckResult{
+			Status: report.StatusFail,
+			Tag:    "Unknown",
+			Detail: "Unknown",
+		}
+		reportInput.Q2 = report.CheckResult{
+			Status: report.StatusFail,
+			Tag:    "Invalid",
+			Detail: report.Q2AdditionalArtifactsSignatureInvalid(),
+		}
+		reportInput.Q3 = report.CheckResult{
+			Status: report.StatusFail,
+			Tag:    "Invalid",
+			Detail: report.Q3AdditionalArtifactsContentsInvalid(),
+		}
+		reportInput.Q4 = report.CheckResult{
+			Status: report.StatusFail,
+			Tag:    "Unknown",
+			Detail: "Unknown",
+		}
+		reportInput.Q5 = report.CheckResult{
+			Status: report.StatusFail,
+			Tag:    "Invalid",
+			Detail: report.Q5EvidenceBundleSignatureInvalid(),
+		}
+		reportInput.Q6 = report.CheckResult{
+			Status: report.StatusFail,
+			Tag:    "Missing",
+			Detail: report.Q6HardwareEvidenceMissingOrInvalidFormat(),
+		}
+		reportInput.Q7 = report.CheckResult{
+			Status: report.StatusFail,
+			Tag:    "Missing",
+			Detail: report.Q7SoftwareEvidenceMissingOrInvalidFormat(),
+		}
+		reportInput.Q10 = report.CheckResult{
+			Status: report.StatusInfo,
+			Tag:    domain.AMDSEVSNPModel(domain.ENUM_AMD_SEV_SNP_MODEL_UNKNOWN).String(),
+			Detail: "",
+		}
 		return err
+	} else {
+		reportInput.Q1 = report.CheckResult{
+			Status: report.StatusPass,
+			Tag:    "Fetched",
+			Detail: report.Q1AdditionalArtifactsRetrieved(optAdditionalArtifactsBundle == nil),
+		}
+		reportInput.Q2 = report.CheckResult{
+			Status: report.StatusPass,
+			Tag:    "Valid",
+			Detail: report.Q2AdditionalArtifactsSignatureValid(getGceSnpEvidenceOutput.InstanceKeyCert),
+		}
+		reportInput.Q3 = report.CheckResult{
+			Status: report.StatusPass,
+			Tag:    "Valid",
+			Detail: report.Q3AdditionalArtifactsContentsValid(),
+		}
+		reportInput.Q4 = report.CheckResult{
+			Status: report.StatusPass,
+			Tag:    "Fetched",
+			Detail: report.Q4EvidenceBundleRetrieved(),
+		}
+		reportInput.Q5 = report.CheckResult{
+			Status: report.StatusPass,
+			Tag:    "Valid",
+			Detail: report.Q5EvidenceBundleSignatureValid(getGceSnpEvidenceOutput.InstanceKeyCert),
+		}
+		reportInput.Q6 = report.CheckResult{
+			Status: report.StatusPass,
+			Tag:    "Present",
+			Detail: report.Q6HardwareEvidencePresentValidFormat(),
+		}
+		reportInput.Q7 = report.CheckResult{
+			Status: report.StatusPass,
+			Tag:    "Present",
+			Detail: report.Q7SoftwareEvidencePresentValidFormat(),
+		}
+		reportInput.Q10 = report.CheckResult{
+			Status: report.StatusInfo,
+			Tag:    report.Q10ProcessorModel(getGceSnpEvidenceOutput.Model.String()),
+			Detail: "",
+		}
 	}
 
 	// Hardware evidence related sub-tasks
@@ -76,7 +159,34 @@ func RunSnpGceAttestationWorkflow(
 		Ark:        getamdtrustedcertsOutput.Ark,
 	})
 	if err != nil {
+		reportInput.Q8 = report.CheckResult{
+			Status: report.StatusFail,
+			Tag:    "Invalid",
+			Detail: report.Q8HardwareEvidenceSignatureInvalid(),
+		}
+		reportInput.Q11 = report.CheckResult{
+			Status: report.StatusFail,
+			Tag:    "Unendorsed",
+			Detail: report.Q11HardwareEvidenceChainInvalid(),
+		}
 		return err
+	} else {
+		reportInput.Q8 = report.CheckResult{
+			Status: report.StatusPass,
+			Tag:    "Valid",
+			Detail: report.Q8HardwareEvidenceSignedBy(getGceSnpEvidenceOutput.Vcek),
+		}
+		reportInput.Q11 = report.CheckResult{
+			Status: report.StatusPass,
+			Tag:    "Endorsed",
+			Detail: report.Q11HardwareEvidenceChainValid(
+				"VCEK",
+				getGceSnpEvidenceOutput.Vcek,
+				"ASK",
+				getamdtrustedcertsOutput.Asvk,
+				getamdtrustedcertsOutput.Ark,
+			),
+		}
 	}
 
 	log.Get().Infoln("Verifying freshness of the hardware evidence")
@@ -95,7 +205,28 @@ func RunSnpGceAttestationWorkflow(
 		},
 	)
 	if err != nil {
+		reportInput.Q12 = report.CheckResult{
+			Status: report.StatusFail,
+			Tag:    "Stale",
+			Detail: report.Q12HardwareEvidenceNotFresh(),
+		}
+		reportInput.Q17 = report.CheckResult{
+			Status: report.StatusFail,
+			Tag:    "Unbound",
+			Detail: report.Q17InstanceKeyNotBoundToHardwareEvidence(),
+		}
 		return err
+	} else {
+		reportInput.Q12 = report.CheckResult{
+			Status: report.StatusPass,
+			Tag:    "Fresh",
+			Detail: report.Q12HardwareEvidenceFresh(),
+		}
+		reportInput.Q17 = report.CheckResult{
+			Status: report.StatusPass,
+			Tag:    "Bound",
+			Detail: report.Q17InstanceKeyBoundToHardwareEvidence(getGceSnpEvidenceOutput.InstanceKeyCert),
+		}
 	}
 
 	log.Get().Infoln("Getting endorsed artifacts for hardware evidence measurement verification")
@@ -104,6 +235,11 @@ func RunSnpGceAttestationWorkflow(
 		HwEvidence: getGceSnpEvidenceOutput.HwEvidence,
 	})
 	if err != nil {
+		reportInput.Q15 = report.CheckResult{
+			Status: report.StatusFail,
+			Tag:    "Mismatch",
+			Detail: report.Q15HardwareMeasurementsMismatch(),
+		}
 		return err
 	}
 
@@ -118,7 +254,18 @@ func RunSnpGceAttestationWorkflow(
 		},
 	)
 	if err != nil {
+		reportInput.Q15 = report.CheckResult{
+			Status: report.StatusFail,
+			Tag:    "Mismatch",
+			Detail: report.Q15HardwareMeasurementsMismatch(),
+		}
 		return err
+	} else {
+		reportInput.Q15 = report.CheckResult{
+			Status: report.StatusPass,
+			Tag:    "Match",
+			Detail: report.Q15GcpHardwareMeasurementsMatch(),
+		}
 	}
 
 	log.Get().Infoln("Verifying the signature of the software evidence")
@@ -129,7 +276,32 @@ func RunSnpGceAttestationWorkflow(
 		RootAkCACert:         getgcetrustedcertsOutput.RootCACertificate,
 	})
 	if err != nil {
+		reportInput.Q9 = report.CheckResult{
+			Status: report.StatusFail,
+			Tag:    "Invalid",
+			Detail: report.Q9SoftwareEvidenceSignatureInvalid(),
+		}
+		reportInput.Q13 = report.CheckResult{
+			Status: report.StatusFail,
+			Tag:    "Unendorsed",
+			Detail: report.Q13SoftwareEvidenceChainInvalid(),
+		}
 		return err
+	} else {
+		reportInput.Q9 = report.CheckResult{
+			Status: report.StatusPass,
+			Tag:    "Valid",
+			Detail: report.Q9SoftwareEvidenceSignedByCert(getgcetrustedcertsOutput.Ak),
+		}
+		reportInput.Q13 = report.CheckResult{
+			Status: report.StatusPass,
+			Tag:    "Endorsed",
+			Detail: report.Q13GcpSoftwareEvidenceChainValid(
+				getgcetrustedcertsOutput.Ak,
+				getgcetrustedcertsOutput.IntermediateCACertificate,
+				getgcetrustedcertsOutput.RootCACertificate,
+			),
+		}
 	}
 
 	log.Get().Infoln("Verifying freshness of the software evidence")
@@ -143,7 +315,28 @@ func RunSnpGceAttestationWorkflow(
 		},
 	)
 	if err != nil {
+		reportInput.Q14 = report.CheckResult{
+			Status: report.StatusFail,
+			Tag:    "Stale",
+			Detail: report.Q14SoftwareEvidenceNotFresh(),
+		}
+		reportInput.Q18 = report.CheckResult{
+			Status: report.StatusFail,
+			Tag:    "Unbound",
+			Detail: report.Q18InstanceKeyNotBoundToSoftwareEvidence(),
+		}
 		return err
+	} else {
+		reportInput.Q14 = report.CheckResult{
+			Status: report.StatusPass,
+			Tag:    "Fresh",
+			Detail: report.Q14SoftwareEvidenceFresh(),
+		}
+		reportInput.Q18 = report.CheckResult{
+			Status: report.StatusPass,
+			Tag:    "Bound",
+			Detail: report.Q18InstanceKeyBoundToSoftwareEvidence(getGceSnpEvidenceOutput.InstanceKeyCert),
+		}
 	}
 
 	log.Get().Infoln("Verifying measurement of the software evidence")
@@ -156,9 +349,19 @@ func RunSnpGceAttestationWorkflow(
 		},
 	)
 	if err != nil {
+		reportInput.Q16 = report.CheckResult{
+			Status: report.StatusFail,
+			Tag:    "Mismatch",
+			Detail: report.Q16SoftwareMeasurementsMismatch(),
+		}
 		return err
+	} else {
+		reportInput.Q16 = report.CheckResult{
+			Status: report.StatusPass,
+			Tag:    "Match",
+			Detail: report.Q16SoftwareMeasurementsMatch(),
+		}
 	}
 
-	log.Get().Infoln("SNP GCE attestation successful")
 	return nil
 }

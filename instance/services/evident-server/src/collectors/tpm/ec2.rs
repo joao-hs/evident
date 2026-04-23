@@ -83,9 +83,9 @@ impl Ec2TpmWrapper {
             Ok::<Vec<u8>, EvidentError>(ak_name.value().to_vec())
         })?;
 
-        let ak_public_key_spki_bytes: Vec<u8> = Self::with_new_session(&mut context, |context| {
-            Self::get_ak_public_key_spki_bytes(context, ak_handle)
-        })?;
+        let ak_public_key_spki_bytes: Vec<u8> = context
+            .execute_without_session(|ctx| Self::get_ak_public_key_spki_bytes(ctx, ak_handle))?;
+
         debug!("Successfully initialized Ec2TpmWrapper");
 
         Ok(Self {

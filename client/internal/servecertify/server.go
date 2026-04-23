@@ -17,7 +17,12 @@ func Serve(port int, caCert []*x509.Certificate, caKey *ecdsa.PrivateKey, tlsCon
 	creds := credentials.NewTLS(tlsConfig)
 	server := grpc.NewServer(grpc.Creds(creds))
 
-	pb.RegisterCertificateIssuerVerifierServiceServer(server, NewCertificateIssuerVerifierServiceImpl(caCert, caKey))
+	certIssuerVerifierService, err := NewCertificateIssuerVerifierServiceImpl(caCert, caKey)
+	if err != nil {
+		return err
+	}
+
+	pb.RegisterCertificateIssuerVerifierServiceServer(server, certIssuerVerifierService)
 
 	listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
 	if err != nil {

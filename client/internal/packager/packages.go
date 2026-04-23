@@ -23,10 +23,10 @@ import (
  */
 
 const (
-	trustedPackagesDirPath       = "/etc/evident/trusted-packages"
+	TrustedPackagesDirPath       = "/etc/evident/trusted-packages"
 	trustedPackageDirNamePattern = "^([a-fA-F0-9]{64})\\.package$" // sha256 digest in hex is 64 characters long
-	manifestFileName             = "MANIFEST"
-	expectedPcrsFileName         = "expected-pcrs.json"
+	ManifestFileName             = "MANIFEST"
+	ExpectedPcrsFileName         = "expected-pcrs.json"
 	signatureFileNamePattern     = "^[a-zA-Z0-9_-]+\\.sig\\.asc$"
 )
 
@@ -59,7 +59,7 @@ func LoadTrustedPackages() (Packages, error) {
 		return nil, err
 	}
 
-	entries, err := os.ReadDir(trustedPackagesDirPath)
+	entries, err := os.ReadDir(TrustedPackagesDirPath)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func LoadTrustedPackages() (Packages, error) {
 		if !ok {
 			continue
 		}
-		pkgDirPath := filepath.Join(trustedPackagesDirPath, name)
+		pkgDirPath := filepath.Join(TrustedPackagesDirPath, name)
 
 		loaded, err := loadPackage(pkgDirPath, kr)
 		if err != nil {
@@ -115,7 +115,7 @@ func loadPackage(pkgDirPath string, kr keyring.TrustedImageDistributorKeyRing) (
 		return nil, fmt.Errorf("%s exists but is not a directory", pkgDirPath)
 	}
 
-	manifestPath := filepath.Join(pkgDirPath, manifestFileName)
+	manifestPath := filepath.Join(pkgDirPath, ManifestFileName)
 	if err := assertFileExists(manifestPath); err != nil {
 		return nil, err
 	}
@@ -129,19 +129,19 @@ func loadPackage(pkgDirPath string, kr keyring.TrustedImageDistributorKeyRing) (
 		return nil, err
 	}
 
-	digests, err := loadExpectedPcrs(filepath.Join(pkgDirPath, expectedPcrsFileName))
+	digests, err := loadExpectedPcrs(filepath.Join(pkgDirPath, ExpectedPcrsFileName))
 	if err != nil {
-		return nil, fmt.Errorf("cannot load %s: %w", expectedPcrsFileName, err)
+		return nil, fmt.Errorf("cannot load %s: %w", ExpectedPcrsFileName, err)
 	}
 
 	return &pkg{expectedPcrDigests: digests}, nil
 }
 
 func assertPackagesDir() error {
-	info, err := os.Stat(trustedPackagesDirPath)
+	info, err := os.Stat(TrustedPackagesDirPath)
 	if err == nil {
 		if !info.IsDir() {
-			return fmt.Errorf("%s exists but is not a directory", trustedPackagesDirPath)
+			return fmt.Errorf("%s exists but is not a directory", TrustedPackagesDirPath)
 		}
 		// TODO: check if world-readable, onwer-writable, and owned by root
 		return nil

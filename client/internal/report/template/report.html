@@ -1,0 +1,1186 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Attestation Report for {{ .IpAddress }}</title>
+        <style>
+            @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+
+            :root {
+                --bg: #0c0e11;
+                --bg-surface: #13161b;
+                --bg-surface-raised: #1a1e25;
+                --bg-surface-hover: #1f2430;
+                --border: #2a2f3a;
+                --border-subtle: #1e222b;
+                --text-primary: #e2e4e9;
+                --text-secondary: #8b919e;
+                --text-muted: #5c6270;
+                --pass: #2dd4a0;
+                --pass-bg: rgba(45, 212, 160, 0.08);
+                --pass-border: rgba(45, 212, 160, 0.2);
+                --fail: #f87171;
+                --fail-bg: rgba(248, 113, 113, 0.08);
+                --fail-border: rgba(248, 113, 113, 0.2);
+                --skip: #fbbf24;
+                --skip-bg: rgba(251, 191, 36, 0.08);
+                --skip-border: rgba(251, 191, 36, 0.2);
+                --info: #60a5fa;
+                --info-bg: rgba(96, 165, 250, 0.08);
+                --info-border: rgba(96, 165, 250, 0.2);
+                --mono: "IBM Plex Mono", monospace;
+                --sans: "IBM Plex Sans", sans-serif;
+            }
+
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            body {
+                font-family: var(--sans);
+                background: var(--bg);
+                color: var(--text-primary);
+                line-height: 1.6;
+                -webkit-font-smoothing: antialiased;
+            }
+
+            .report {
+                max-width: 860px;
+                margin: 0 auto;
+                padding: 48px 24px 96px;
+            }
+
+            /* ── Header ── */
+            .report-header {
+                border-bottom: 1px solid var(--border);
+                padding-bottom: 32px;
+                margin-bottom: 40px;
+            }
+
+            .report-header h1 {
+                font-family: var(--mono);
+                font-size: 20px;
+                font-weight: 600;
+                letter-spacing: -0.02em;
+                margin-bottom: 16px;
+                color: var(--text-primary);
+            }
+
+            .report-meta {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 12px;
+            }
+
+            .meta-item {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            .meta-label {
+                font-size: 11px;
+                font-weight: 500;
+                text-transform: uppercase;
+                letter-spacing: 0.06em;
+                color: var(--text-muted);
+            }
+
+            .meta-value {
+                font-family: var(--mono);
+                font-size: 13px;
+                color: var(--text-secondary);
+                word-break: break-all;
+            }
+
+            /* ── Verdict Banner ── */
+            .verdict {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 16px 20px;
+                border-radius: 6px;
+                margin-bottom: 40px;
+                font-family: var(--mono);
+                font-size: 14px;
+                font-weight: 600;
+            }
+
+            .verdict--pass {
+                background: var(--pass-bg);
+                border: 1px solid var(--pass-border);
+                color: var(--pass);
+            }
+
+            .verdict--fail {
+                background: var(--fail-bg);
+                border: 1px solid var(--fail-border);
+                color: var(--fail);
+            }
+
+            .verdict-icon {
+                font-size: 18px;
+                flex-shrink: 0;
+            }
+
+            /* ── Sections ── */
+            .section {
+                margin-bottom: 40px;
+            }
+
+            .section-header {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                margin-bottom: 8px;
+            }
+
+            .section-number {
+                font-family: var(--mono);
+                font-size: 11px;
+                font-weight: 600;
+                color: var(--text-muted);
+                background: var(--bg-surface-raised);
+                border: 1px solid var(--border-subtle);
+                border-radius: 4px;
+                padding: 2px 8px;
+                flex-shrink: 0;
+            }
+
+            .section-title {
+                font-size: 16px;
+                font-weight: 600;
+                color: var(--text-primary);
+            }
+
+            .section-desc {
+                font-size: 13px;
+                color: var(--text-muted);
+                margin-bottom: 20px;
+                padding-left: 52px;
+                line-height: 1.5;
+            }
+
+            /* ── Check Items ── */
+            .check-list {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            .check {
+                background: var(--bg-surface);
+                border: 1px solid var(--border-subtle);
+                border-radius: 6px;
+                overflow: hidden;
+                transition: border-color 0.15s ease;
+            }
+
+            .check:hover {
+                border-color: var(--border);
+            }
+
+            .check-summary {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 14px 16px;
+                cursor: pointer;
+                user-select: none;
+                list-style: none;
+            }
+
+            .check-summary::-webkit-details-marker {
+                display: none;
+            }
+            .check-summary::marker {
+                content: "";
+            }
+
+            .check-indicator {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                flex-shrink: 0;
+            }
+
+            .check-indicator--pass {
+                background: var(--pass);
+                box-shadow: 0 0 6px rgba(45, 212, 160, 0.4);
+            }
+            .check-indicator--fail {
+                background: var(--fail);
+                box-shadow: 0 0 6px rgba(248, 113, 113, 0.4);
+            }
+            .check-indicator--skip {
+                background: var(--skip);
+                box-shadow: 0 0 6px rgba(251, 191, 36, 0.4);
+            }
+            .check-indicator--info {
+                background: var(--info);
+                box-shadow: 0 0 6px rgba(96, 165, 250, 0.4);
+            }
+
+            .check-question {
+                flex: 1;
+                font-size: 13.5px;
+                font-weight: 500;
+                color: var(--text-primary);
+                line-height: 1.4;
+            }
+
+            .check-result-tag {
+                font-family: var(--mono);
+                font-size: 12px;
+                font-weight: 500;
+                padding: 3px 10px;
+                border-radius: 4px;
+                flex-shrink: 0;
+                white-space: nowrap;
+            }
+
+            .check-result-tag--pass {
+                color: var(--pass);
+                background: var(--pass-bg);
+                border: 1px solid var(--pass-border);
+            }
+
+            .check-result-tag--fail {
+                color: var(--fail);
+                background: var(--fail-bg);
+                border: 1px solid var(--fail-border);
+            }
+
+            .check-result-tag--skip {
+                color: var(--skip);
+                background: var(--skip-bg);
+                border: 1px solid var(--skip-border);
+            }
+
+            .check-result-tag--info {
+                color: var(--info);
+                background: var(--info-bg);
+                border: 1px solid var(--info-border);
+            }
+
+            .check-expand-icon {
+                color: var(--text-muted);
+                font-size: 12px;
+                flex-shrink: 0;
+                transition: transform 0.2s ease;
+            }
+
+            .check[open] .check-expand-icon {
+                transform: rotate(90deg);
+            }
+
+            .check-detail {
+                padding: 0 16px 16px 36px;
+                border-top: 1px solid var(--border-subtle);
+            }
+
+            .check-detail-section {
+                margin-top: 12px;
+            }
+
+            .check-detail-label {
+                font-size: 10px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.08em;
+                color: var(--text-muted);
+                margin-bottom: 4px;
+            }
+
+            .check-detail-text {
+                font-size: 13px;
+                color: var(--text-secondary);
+                line-height: 1.55;
+            }
+
+            .check-detail-text code {
+                font-family: var(--mono);
+                font-size: 12px;
+                background: var(--bg-surface-raised);
+                border: 1px solid var(--border-subtle);
+                padding: 1px 5px;
+                border-radius: 3px;
+                color: var(--text-primary);
+                word-break: break-all;
+            }
+
+            /* ── Footer ── */
+            .report-footer {
+                margin-top: 48px;
+                padding-top: 24px;
+                border-top: 1px solid var(--border-subtle);
+                font-size: 12px;
+                color: var(--text-muted);
+                display: flex;
+                justify-content: space-between;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+
+            /* ── Responsive ── */
+            @media (max-width: 600px) {
+                .report {
+                    padding: 24px 16px 64px;
+                }
+                .section-desc {
+                    padding-left: 0;
+                }
+                .check-summary {
+                    padding: 12px;
+                    gap: 8px;
+                }
+                .check-detail {
+                    padding-left: 28px;
+                }
+                .check-result-tag {
+                    font-size: 11px;
+                    padding: 2px 8px;
+                }
+                .report-meta {
+                    grid-template-columns: 1fr;
+                }
+            }
+
+            @media print {
+                body {
+                    background: #fff;
+                    color: #111;
+                }
+                .check {
+                    break-inside: avoid;
+                }
+                .check-detail {
+                    display: block !important;
+                }
+                details[open] .check-detail {
+                    border-top: 1px solid #ddd;
+                }
+                .check-expand-icon {
+                    display: none;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="report">
+            <!-- ── Header ── -->
+            <header class="report-header">
+                <h1>Attestation Report</h1>
+                <div class="report-meta">
+                    <div class="meta-item">
+                        <span class="meta-label">IP Address</span>
+                        <span class="meta-value">{{ .IpAddress }}</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Timestamp</span>
+                        <span class="meta-value">{{ .Timestamp }}</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Cloud Provider</span>
+                        <span class="meta-value">{{ .CloudProvider }}</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-label">Evident Client</span>
+                        <span class="meta-value">{{ .ClientVersion }}</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- ── Overall Verdict ── -->
+            {{ if .AllPassed }}
+            <div class="verdict verdict--pass">
+                <span class="verdict-icon">✓</span>
+                Attestation passed: all checks completed successfully.
+            </div>
+            {{ else }}
+            <div class="verdict verdict--fail">
+                <span class="verdict-icon">✗</span>
+                Attestation failed: {{ .FailCount }} check(s) did not pass.
+            </div>
+            {{ end }}
+
+            <!-- ════════════════════════════════════════════════════ -->
+            <!-- Section 1: Evidence Integrity                       -->
+            <!-- ════════════════════════════════════════════════════ -->
+            <section class="section">
+                <div class="section-header">
+                    <span class="section-number">01</span>
+                    <span class="section-title">Evidence Integrity</span>
+                </div>
+                <p class="section-desc">
+                    The client retrieves the additional artifacts bundle and the
+                    evidence bundle from the Evident server and verifies their
+                    structural integrity and digital signatures.
+                </p>
+
+                <div class="check-list">
+                    <!-- Q1 -->
+                    <details class="check">
+                        <summary class="check-summary">
+                            <span
+                                class="check-indicator check-indicator--{{ .Q1.Status }}"
+                            ></span>
+                            <span class="check-question"
+                                >Additional artifacts bundle retrieval</span
+                            >
+                            <span
+                                class="check-result-tag check-result-tag--{{ .Q1.Status }}"
+                                >{{ .Q1.Tag }}</span
+                            >
+                            <span class="check-expand-icon">▸</span>
+                        </summary>
+                        <div class="check-detail">
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">
+                                    What is being checked
+                                </div>
+                                <p class="check-detail-text">
+                                    The additional artifacts bundle contains
+                                    supplementary data required for attestation
+                                    verification. This check confirms whether
+                                    the client successfully retrieved it from
+                                    the Evident server.
+                                </p>
+                            </div>
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">Result</div>
+                                <p class="check-detail-text">
+                                    {{ .Q1.Detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- Q2 -->
+                    <details class="check">
+                        <summary class="check-summary">
+                            <span
+                                class="check-indicator check-indicator--{{ .Q2.Status }}"
+                            ></span>
+                            <span class="check-question"
+                                >Additional artifacts bundle signature</span
+                            >
+                            <span
+                                class="check-result-tag check-result-tag--{{ .Q2.Status }}"
+                                >{{ .Q2.Tag }}</span
+                            >
+                            <span class="check-expand-icon">▸</span>
+                        </summary>
+                        <div class="check-detail">
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">
+                                    What is being checked
+                                </div>
+                                <p class="check-detail-text">
+                                    The additional artifacts bundle is digitally
+                                    signed by the instance key. This check
+                                    verifies the signature to confirm the bundle
+                                    has not been tampered with in transit and
+                                    originates from the expected instance.
+                                </p>
+                            </div>
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">Result</div>
+                                <p class="check-detail-text">
+                                    {{ .Q2.Detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- Q3 -->
+                    <details class="check">
+                        <summary class="check-summary">
+                            <span
+                                class="check-indicator check-indicator--{{ .Q3.Status }}"
+                            ></span>
+                            <span class="check-question"
+                                >Additional artifacts bundle contents
+                                validity</span
+                            >
+                            <span
+                                class="check-result-tag check-result-tag--{{ .Q3.Status }}"
+                                >{{ .Q3.Tag }}</span
+                            >
+                            <span class="check-expand-icon">▸</span>
+                        </summary>
+                        <div class="check-detail">
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">
+                                    What is being checked
+                                </div>
+                                <p class="check-detail-text">
+                                    Beyond signature validity, the contents of
+                                    the additional artifacts bundle are
+                                    inspected for structural correctness and
+                                    completeness. This ensures all expected
+                                    artifacts are present and well-formed.
+                                </p>
+                            </div>
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">Result</div>
+                                <p class="check-detail-text">
+                                    {{ .Q3.Detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- Q4 -->
+                    <details class="check">
+                        <summary class="check-summary">
+                            <span
+                                class="check-indicator check-indicator--{{ .Q4.Status }}"
+                            ></span>
+                            <span class="check-question"
+                                >Evidence bundle retrieval</span
+                            >
+                            <span
+                                class="check-result-tag check-result-tag--{{ .Q4.Status }}"
+                                >{{ .Q4.Tag }}</span
+                            >
+                            <span class="check-expand-icon">▸</span>
+                        </summary>
+                        <div class="check-detail">
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">
+                                    What is being checked
+                                </div>
+                                <p class="check-detail-text">
+                                    The evidence bundle contains the hardware
+                                    and software attestation evidence produced
+                                    by the instance. This check confirms whether
+                                    the client successfully retrieved it from
+                                    the Evident server.
+                                </p>
+                            </div>
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">Result</div>
+                                <p class="check-detail-text">
+                                    {{ .Q4.Detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- Q5 -->
+                    <details class="check">
+                        <summary class="check-summary">
+                            <span
+                                class="check-indicator check-indicator--{{ .Q5.Status }}"
+                            ></span>
+                            <span class="check-question"
+                                >Evidence bundle signature</span
+                            >
+                            <span
+                                class="check-result-tag check-result-tag--{{ .Q5.Status }}"
+                                >{{ .Q5.Tag }}</span
+                            >
+                            <span class="check-expand-icon">▸</span>
+                        </summary>
+                        <div class="check-detail">
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">
+                                    What is being checked
+                                </div>
+                                <p class="check-detail-text">
+                                    The evidence bundle is digitally signed by
+                                    the instance key. This check verifies the
+                                    signature to confirm the bundle has not been
+                                    tampered with in transit and originates from
+                                    the expected instance.
+                                </p>
+                            </div>
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">Result</div>
+                                <p class="check-detail-text">
+                                    {{ .Q5.Detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- Q6 -->
+                    <details class="check">
+                        <summary class="check-summary">
+                            <span
+                                class="check-indicator check-indicator--{{ .Q6.Status }}"
+                            ></span>
+                            <span class="check-question"
+                                >Hardware evidence presence</span
+                            >
+                            <span
+                                class="check-result-tag check-result-tag--{{ .Q6.Status }}"
+                                >{{ .Q6.Tag }}</span
+                            >
+                            <span class="check-expand-icon">▸</span>
+                        </summary>
+                        <div class="check-detail">
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">
+                                    What is being checked
+                                </div>
+                                <p class="check-detail-text">
+                                    The evidence bundle must include a hardware
+                                    evidence item — specifically, an AMD SEV-SNP
+                                    attestation report in the expected format.
+                                    This check confirms its presence and format
+                                    correctness.
+                                </p>
+                            </div>
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">Result</div>
+                                <p class="check-detail-text">
+                                    {{ .Q6.Detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- Q7 -->
+                    <details class="check">
+                        <summary class="check-summary">
+                            <span
+                                class="check-indicator check-indicator--{{ .Q7.Status }}"
+                            ></span>
+                            <span class="check-question"
+                                >Software evidence presence</span
+                            >
+                            <span
+                                class="check-result-tag check-result-tag--{{ .Q7.Status }}"
+                                >{{ .Q7.Tag }}</span
+                            >
+                            <span class="check-expand-icon">▸</span>
+                        </summary>
+                        <div class="check-detail">
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">
+                                    What is being checked
+                                </div>
+                                <p class="check-detail-text">
+                                    The evidence bundle must include a software
+                                    evidence item — specifically, a TPM quote in
+                                    the expected format. This check confirms its
+                                    presence and format correctness.
+                                </p>
+                            </div>
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">Result</div>
+                                <p class="check-detail-text">
+                                    {{ .Q7.Detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- Q8 -->
+                    <details class="check">
+                        <summary class="check-summary">
+                            <span
+                                class="check-indicator check-indicator--{{ .Q8.Status }}"
+                            ></span>
+                            <span class="check-question"
+                                >Hardware evidence signature</span
+                            >
+                            <span
+                                class="check-result-tag check-result-tag--{{ .Q8.Status }}"
+                                >{{ .Q8.Tag }}</span
+                            >
+                            <span class="check-expand-icon">▸</span>
+                        </summary>
+                        <div class="check-detail">
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">
+                                    What is being checked
+                                </div>
+                                <p class="check-detail-text">
+                                    The AMD SEV-SNP attestation report carries a
+                                    cryptographic signature. This check verifies
+                                    that the signature is valid, which confirms
+                                    the report was produced by a genuine AMD
+                                    SEV-SNP platform and has not been tampered
+                                    with.
+                                </p>
+                            </div>
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">Result</div>
+                                <p class="check-detail-text">
+                                    {{ .Q8.Detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- Q9 -->
+                    <details class="check">
+                        <summary class="check-summary">
+                            <span
+                                class="check-indicator check-indicator--{{ .Q9.Status }}"
+                            ></span>
+                            <span class="check-question"
+                                >Software evidence signature</span
+                            >
+                            <span
+                                class="check-result-tag check-result-tag--{{ .Q9.Status }}"
+                                >{{ .Q9.Tag }}</span
+                            >
+                            <span class="check-expand-icon">▸</span>
+                        </summary>
+                        <div class="check-detail">
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">
+                                    What is being checked
+                                </div>
+                                <p class="check-detail-text">
+                                    The TPM quote carries a cryptographic
+                                    signature. This check verifies that the
+                                    signature is valid, which confirms the quote
+                                    was produced by a genuine TPM and has not
+                                    been tampered with.
+                                </p>
+                            </div>
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">Result</div>
+                                <p class="check-detail-text">
+                                    {{ .Q9.Detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- Q10 -->
+                    <details class="check">
+                        <summary class="check-summary">
+                            <span
+                                class="check-indicator check-indicator--{{ .Q10.Status }}"
+                            ></span>
+                            <span class="check-question"
+                                >AMD SEV-SNP processor model</span
+                            >
+                            <span
+                                class="check-result-tag check-result-tag--{{ .Q10.Status }}"
+                                >{{ .Q10.Tag }}</span
+                            >
+                            <span class="check-expand-icon">▸</span>
+                        </summary>
+                        <div class="check-detail">
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">
+                                    What is being checked
+                                </div>
+                                <p class="check-detail-text">
+                                    The processor model is identified from the
+                                    AMD SEV-SNP attestation report. This is an
+                                    informational check — it reports which AMD
+                                    processor family is running the confidential
+                                    VM.
+                                </p>
+                            </div>
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">Result</div>
+                                <p class="check-detail-text">
+                                    {{ .Q10.Detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </section>
+
+            <!-- ════════════════════════════════════════════════════ -->
+            <!-- Section 2: Evidence Trustworthiness                 -->
+            <!-- ════════════════════════════════════════════════════ -->
+            <section class="section">
+                <div class="section-header">
+                    <span class="section-number">02</span>
+                    <span class="section-title">Evidence Trustworthiness</span>
+                </div>
+                <p class="section-desc">
+                    The client verifies that the keys used to sign the hardware
+                    and software evidence are endorsed by their respective root
+                    of trust, and that each evidence item is fresh (not
+                    replayed).
+                </p>
+
+                <div class="check-list">
+                    <!-- Q11 -->
+                    <details class="check">
+                        <summary class="check-summary">
+                            <span
+                                class="check-indicator check-indicator--{{ .Q11.Status }}"
+                            ></span>
+                            <span class="check-question"
+                                >Hardware evidence key endorsement (AMD root of
+                                trust)</span
+                            >
+                            <span
+                                class="check-result-tag check-result-tag--{{ .Q11.Status }}"
+                                >{{ .Q11.Tag }}</span
+                            >
+                            <span class="check-expand-icon">▸</span>
+                        </summary>
+                        <div class="check-detail">
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">
+                                    What is being checked
+                                </div>
+                                <p class="check-detail-text">
+                                    The key that signed the AMD SEV-SNP
+                                    attestation report must chain back to AMD's
+                                    root of trust. The signing key (VCEK or
+                                    VLEK) must be endorsed by the AMD SEV Key
+                                    (ASK) or AMD SEV Versioned Key (ASVK), which
+                                    in turn must be endorsed by the AMD Root Key
+                                    (ARK). The trusted certificates are
+                                    retrieved from AMD's publicly available KDS
+                                    endpoint.
+                                </p>
+                            </div>
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">Result</div>
+                                <p class="check-detail-text">
+                                    {{ .Q11.Detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- Q12 -->
+                    <details class="check">
+                        <summary class="check-summary">
+                            <span
+                                class="check-indicator check-indicator--{{ .Q12.Status }}"
+                            ></span>
+                            <span class="check-question"
+                                >Hardware evidence freshness</span
+                            >
+                            <span
+                                class="check-result-tag check-result-tag--{{ .Q12.Status }}"
+                                >{{ .Q12.Tag }}</span
+                            >
+                            <span class="check-expand-icon">▸</span>
+                        </summary>
+                        <div class="check-detail">
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">
+                                    What is being checked
+                                </div>
+                                <p class="check-detail-text">
+                                    A unique identifier (nonce) generated by the
+                                    client is included in the attestation
+                                    request. The same identifier must appear in
+                                    the AMD SEV-SNP attestation report. A
+                                    mismatch would indicate that the report is
+                                    stale or has been replayed from a previous
+                                    attestation session.
+                                </p>
+                            </div>
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">Result</div>
+                                <p class="check-detail-text">
+                                    {{ .Q12.Detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- Q13 -->
+                    <details class="check">
+                        <summary class="check-summary">
+                            <span
+                                class="check-indicator check-indicator--{{ .Q13.Status }}"
+                            ></span>
+                            <span class="check-question"
+                                >Software evidence key endorsement (cloud
+                                provider root of trust)</span
+                            >
+                            <span
+                                class="check-result-tag check-result-tag--{{ .Q13.Status }}"
+                                >{{ .Q13.Tag }}</span
+                            >
+                            <span class="check-expand-icon">▸</span>
+                        </summary>
+                        <div class="check-detail">
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">
+                                    What is being checked
+                                </div>
+                                <p class="check-detail-text">
+                                    The key that signed the TPM quote must be
+                                    endorsed by the cloud provider's root of
+                                    trust. For GCP, the Attestation Key (AK)
+                                    must chain through an intermediate
+                                    certificate to Google's root certificate.
+                                    For AWS, the AK must be proved co-resident
+                                    with an Endorsement Key (EK) that matches
+                                    the EK retrieved from the AWS API.
+                                </p>
+                            </div>
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">Result</div>
+                                <p class="check-detail-text">
+                                    {{ .Q13.Detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- Q14 -->
+                    <details class="check">
+                        <summary class="check-summary">
+                            <span
+                                class="check-indicator check-indicator--{{ .Q14.Status }}"
+                            ></span>
+                            <span class="check-question"
+                                >Software evidence freshness</span
+                            >
+                            <span
+                                class="check-result-tag check-result-tag--{{ .Q14.Status }}"
+                                >{{ .Q14.Tag }}</span
+                            >
+                            <span class="check-expand-icon">▸</span>
+                        </summary>
+                        <div class="check-detail">
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">
+                                    What is being checked
+                                </div>
+                                <p class="check-detail-text">
+                                    A nonce generated by the client is included
+                                    in the TPM quote request. The same nonce
+                                    must appear in the returned TPM quote. A
+                                    mismatch would indicate that the quote is
+                                    stale or has been replayed from a previous
+                                    attestation session.
+                                </p>
+                            </div>
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">Result</div>
+                                <p class="check-detail-text">
+                                    {{ .Q14.Detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </section>
+
+            <!-- ════════════════════════════════════════════════════ -->
+            <!-- Section 3: Evidence Measurement Reproducibility     -->
+            <!-- ════════════════════════════════════════════════════ -->
+            <section class="section">
+                <div class="section-header">
+                    <span class="section-number">03</span>
+                    <span class="section-title"
+                        >Measurement Reproducibility</span
+                    >
+                </div>
+                <p class="section-desc">
+                    The client compares the measurements embedded in the
+                    hardware and software evidence against expected values
+                    derived from known-good reference binaries — either provided
+                    as input or retrieved at runtime from publicly available
+                    endpoints.
+                </p>
+
+                <div class="check-list">
+                    <!-- Q15 -->
+                    <details class="check">
+                        <summary class="check-summary">
+                            <span
+                                class="check-indicator check-indicator--{{ .Q15.Status }}"
+                            ></span>
+                            <span class="check-question"
+                                >Hardware evidence measurements</span
+                            >
+                            <span
+                                class="check-result-tag check-result-tag--{{ .Q15.Status }}"
+                                >{{ .Q15.Tag }}</span
+                            >
+                            <span class="check-expand-icon">▸</span>
+                        </summary>
+                        <div class="check-detail">
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">
+                                    What is being checked
+                                </div>
+                                <p class="check-detail-text">
+                                    The measurements in the AMD SEV-SNP
+                                    attestation report are compared against
+                                    expected values. These expected measurements
+                                    are derived from known-good VM firmware
+                                    binaries. Either from the
+                                    <a href="https://github.com/aws/uefi"
+                                        >github.com/aws/uefi</a
+                                    >
+                                    repository (AWS) or from Google Cloud's
+                                    endorsed firmware. A match confirms that the
+                                    instance is running the expected firmware
+                                    version.
+                                </p>
+                            </div>
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">Result</div>
+                                <p class="check-detail-text">
+                                    {{ .Q15.Detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- Q16 -->
+                    <details class="check">
+                        <summary class="check-summary">
+                            <span
+                                class="check-indicator check-indicator--{{ .Q16.Status }}"
+                            ></span>
+                            <span class="check-question"
+                                >Software evidence measurements</span
+                            >
+                            <span
+                                class="check-result-tag check-result-tag--{{ .Q16.Status }}"
+                                >{{ .Q16.Tag }}</span
+                            >
+                            <span class="check-expand-icon">▸</span>
+                        </summary>
+                        <div class="check-detail">
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">
+                                    What is being checked
+                                </div>
+                                <p class="check-detail-text">
+                                    The composite digest over TPM PCRs 4, 11,
+                                    and 12 from the TPM quote is compared
+                                    against the expected value provided as input
+                                    to the Evident client. If the expected value
+                                    was derived from the deployed VM image, a
+                                    match confirms that the kernel, filesystem,
+                                    and included services at boot time
+                                    correspond exactly to the expected software
+                                    components.
+                                </p>
+                            </div>
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">Result</div>
+                                <p class="check-detail-text">
+                                    {{ .Q16.Detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </section>
+
+            <!-- ════════════════════════════════════════════════════ -->
+            <!-- Section 4: Bindings                                 -->
+            <!-- ════════════════════════════════════════════════════ -->
+            <section class="section">
+                <div class="section-header">
+                    <span class="section-number">04</span>
+                    <span class="section-title">Bindings</span>
+                </div>
+                <p class="section-desc">
+                    Both hardware and software evidence incorporate the instance
+                    key so that it is bound to the endorsed measurements. An
+                    instance with different firmware or software at boot time
+                    could not produce the same binding.
+                </p>
+
+                <div class="check-list">
+                    <!-- Q17 -->
+                    <details class="check">
+                        <summary class="check-summary">
+                            <span
+                                class="check-indicator check-indicator--{{ .Q17.Status }}"
+                            ></span>
+                            <span class="check-question"
+                                >Instance key bound to hardware evidence</span
+                            >
+                            <span
+                                class="check-result-tag check-result-tag--{{ .Q17.Status }}"
+                                >{{ .Q17.Tag }}</span
+                            >
+                            <span class="check-expand-icon">▸</span>
+                        </summary>
+                        <div class="check-detail">
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">
+                                    What is being checked
+                                </div>
+                                <p class="check-detail-text">
+                                    The instance key is incorporated into the
+                                    AMD SEV-SNP attestation report's REPORT_DATA
+                                    field. This binds the key to the
+                                    hardware-measured boot state: an instance
+                                    running different firmware could not produce
+                                    this binding, which prevents key migration
+                                    to a compromised instance.
+                                </p>
+                            </div>
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">Result</div>
+                                <p class="check-detail-text">
+                                    {{ .Q17.Detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- Q18 -->
+                    <details class="check">
+                        <summary class="check-summary">
+                            <span
+                                class="check-indicator check-indicator--{{ .Q18.Status }}"
+                            ></span>
+                            <span class="check-question"
+                                >Instance key bound to software evidence</span
+                            >
+                            <span
+                                class="check-result-tag check-result-tag--{{ .Q18.Status }}"
+                                >{{ .Q18.Tag }}</span
+                            >
+                            <span class="check-expand-icon">▸</span>
+                        </summary>
+                        <div class="check-detail">
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">
+                                    What is being checked
+                                </div>
+                                <p class="check-detail-text">
+                                    The instance key is incorporated into the
+                                    TPM quote's qualifying data. This binds the
+                                    key to the software-measured boot state: an
+                                    instance running different software could
+                                    not produce this binding, which prevents key
+                                    migration to a compromised instance.
+                                </p>
+                            </div>
+                            <div class="check-detail-section">
+                                <div class="check-detail-label">Result</div>
+                                <p class="check-detail-text">
+                                    {{ .Q18.Detail }}
+                                </p>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </section>
+
+            <!-- ── Footer ── -->
+            <footer class="report-footer">
+                <span>Generated by Evident client {{ .ClientVersion }}</span>
+                <span>{{ .Timestamp }}</span>
+            </footer>
+        </div>
+    </body>
+</html>

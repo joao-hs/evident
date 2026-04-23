@@ -13,6 +13,7 @@ import (
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/grpc"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/packager"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/report"
 	pb "gitlab.com/dpss-inesc-id/achilles-cvm/client/pb/evident_protocol/v1"
 )
 
@@ -24,7 +25,7 @@ type Verifier interface {
 		optInstanceID *string,
 		optExpectedPCRs *domain.ExpectedPcrDigests,
 		optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle,
-	) error
+	) (report.ReportInput, error)
 }
 
 type verifier struct {
@@ -49,38 +50,41 @@ func NewVerifierWithContext(ctx context.Context, securePlatform domain.SecureHar
 	}, nil
 }
 
-func (v *verifier) Attest(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optInstanceID *string, optExpectedPCRs *domain.ExpectedPcrDigests, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle) error {
+func (v *verifier) Attest(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optInstanceID *string, optExpectedPCRs *domain.ExpectedPcrDigests, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle) (report.ReportInput, error) {
 	var (
 		optPkgs packager.Packages = nil
 		err     error
 	)
+	reportInput := report.NewDefaultReportInput(targetAddr, v.cloudProvider)
+
 	if optExpectedPCRs == nil {
 		optPkgs, err = packager.LoadTrustedPackages()
 		if err != nil {
-			return fmt.Errorf("failed to load trusted packages: %w", err)
+			return reportInput, fmt.Errorf("failed to load trusted packages: %w", err)
 		}
 	}
 
 	switch v.securePlatform {
 	case domain.ENUM_SECURE_HARDWARE_PLATFORM_AMD_SEV_SNP:
-		return v.attestSNP(targetAddr, targetPort, optCpuCount, optInstanceID, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle)
+		err = v.attestSNP(targetAddr, targetPort, optCpuCount, optInstanceID, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle, &reportInput)
+		return reportInput, err
 	default:
-		return fmt.Errorf("unsupported secure platform: %s", v.securePlatform)
+		return reportInput, fmt.Errorf("unsupported secure platform: %s", v.securePlatform)
 	}
 }
 
-func (v *verifier) attestSNP(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optInstanceID *string, optExpectedPCRs *domain.ExpectedPcrDigests, optPkgs packager.Packages, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle) error {
+func (v *verifier) attestSNP(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optInstanceID *string, optExpectedPCRs *domain.ExpectedPcrDigests, optPkgs packager.Packages, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle, reportInput *report.ReportInput) error {
 	switch v.cloudProvider {
 	case domain.ENUM_CLOUD_SERVICE_PROVIDER_AWS:
-		return v.attestSNPEC2(targetAddr, targetPort, optCpuCount, optInstanceID, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle)
+		return v.attestSNPEC2(targetAddr, targetPort, optCpuCount, optInstanceID, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle, reportInput)
 	case domain.ENUM_CLOUD_SERVICE_PROVIDER_GCP:
-		return v.attestSNPGCE(targetAddr, targetPort, optCpuCount, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle)
+		return v.attestSNPGCE(targetAddr, targetPort, optCpuCount, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle, reportInput)
 	default:
 		return fmt.Errorf("unsupported cloud provider for SNP: %s", v.cloudProvider)
 	}
 }
 
-func (v *verifier) attestSNPEC2(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optInstanceID *string, optExpectedPCRs *domain.ExpectedPcrDigests, optPkgs packager.Packages, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle) error {
+func (v *verifier) attestSNPEC2(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optInstanceID *string, optExpectedPCRs *domain.ExpectedPcrDigests, optPkgs packager.Packages, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle, reportInput *report.ReportInput) error {
 	cfg := config.DefaultConfig()
 
 	cfg.Addr = netip.AddrPortFrom(targetAddr, targetPort).String()
@@ -99,10 +103,10 @@ func (v *verifier) attestSNPEC2(targetAddr netip.Addr, targetPort uint16, optCpu
 	}
 	defer client.Close()
 
-	return workflows.RunSnpEc2AttestationWorkflow(v.ctx, client, optCpuCount, optInstanceID, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle)
+	return workflows.RunSnpEc2AttestationWorkflow(v.ctx, client, optCpuCount, optInstanceID, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle, reportInput)
 }
 
-func (v *verifier) attestSNPGCE(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optExpectedPCRs *domain.ExpectedPcrDigests, optPkgs packager.Packages, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle) error {
+func (v *verifier) attestSNPGCE(targetAddr netip.Addr, targetPort uint16, optCpuCount *uint8, optExpectedPCRs *domain.ExpectedPcrDigests, optPkgs packager.Packages, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle, reportInput *report.ReportInput) error {
 	cfg := config.DefaultConfig()
 
 	cfg.Addr = netip.AddrPortFrom(targetAddr, targetPort).String()
@@ -121,7 +125,7 @@ func (v *verifier) attestSNPGCE(targetAddr netip.Addr, targetPort uint16, optCpu
 	}
 	defer client.Close()
 
-	return workflows.RunSnpGceAttestationWorkflow(v.ctx, client, optCpuCount, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle)
+	return workflows.RunSnpGceAttestationWorkflow(v.ctx, client, optCpuCount, optExpectedPCRs, optPkgs, optAdditionalArtifactsBundle, reportInput)
 }
 
 func useGrpcServerCertificate(cfg *config.Config, optAdditionalArtifactsBundle *pb.AdditionalArtifactsBundle) (bool, error) {

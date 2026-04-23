@@ -95,6 +95,7 @@ func Task(ctx context.Context, input Input) (Output, error) {
 		case ekEc != nil:
 			output.EkEc = ekEc
 			ekEcBytes, err := x509.MarshalPKIXPublicKey(ekEc)
+			log.Get().Debugf("EC EK public key marshaled to bytes: %x", ekEcBytes)
 			if err != nil {
 				return zeroOutput, fmt.Errorf("error while converting EC EK public key to bytes: %w", err)
 			}
@@ -105,6 +106,7 @@ func Task(ctx context.Context, input Input) (Output, error) {
 		case ekRsa != nil:
 			output.EkRsa = ekRsa
 			ekRsaBytes, err := x509.MarshalPKIXPublicKey(ekRsa)
+			log.Get().Debugf("RSA EK public key marshaled to bytes: %x", ekRsaBytes)
 			if err != nil {
 				return zeroOutput, fmt.Errorf("error while marshaling RSA EK public key: %w", err)
 			}
@@ -241,6 +243,29 @@ func Task(ctx context.Context, input Input) (Output, error) {
 		}
 		if akEc != nil && akRsa != nil {
 			return zeroOutput, fmt.Errorf("signing key in TPM evidence is both a valid EC and RSA public key, which should not be possible")
+		}
+
+		switch {
+		case akEc != nil:
+			akEcBytes, err := x509.MarshalPKIXPublicKey(akEc)
+			log.Get().Debugf("AK EC public key marshaled to bytes: %x", akEcBytes)
+			if err != nil {
+				return zeroOutput, fmt.Errorf("error while converting AK EC public key to bytes: %w", err)
+			}
+			path, err = dot.Store(akEcBytes)
+			if err != nil {
+				return zeroOutput, fmt.Errorf("error while storing AK EC public key bytes in dot: %w", err)
+			}
+		case akRsa != nil:
+			akRsaBytes, err := x509.MarshalPKIXPublicKey(akRsa)
+			log.Get().Debugf("AK RSA public key marshaled to bytes: %x", akRsaBytes)
+			if err != nil {
+				return zeroOutput, fmt.Errorf("error while converting AK RSA public key to bytes: %w", err)
+			}
+			path, err = dot.Store(akRsaBytes)
+			if err != nil {
+				return zeroOutput, fmt.Errorf("error while storing AK RSA public key bytes in dot: %w", err)
+			}
 		}
 
 		output.AkEc = akEc
