@@ -19,7 +19,13 @@ PROVIDER_MAIN_PATH := "cmd/provider/main.go"
 default:
     just --list
 
-build-client:
+gen-proto-client:
+    cd {{ CLIENT_DIR }} && buf generate
+
+build-client-keep-proto:
+    cd {{ CLIENT_DIR }} && go build -o {{ CLIENT_BIN }} main.go
+
+build-client: gen-proto-client
     cd {{ CLIENT_DIR }} && go build -o {{ CLIENT_BIN }} main.go
 
 prepare-client-env: build-client
