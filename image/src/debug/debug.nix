@@ -9,6 +9,9 @@
       PermitRootLogin = "prohibit-password";
       PasswordAuthentication = false;
       KbdInteractiveAuthentication = false;
+      AllowUsers = [
+        "root"
+      ];
     };
   };
 
@@ -30,7 +33,6 @@
 
   networking.firewall.allowedTCPPorts = [
     22
-    5001
   ];
 
   users.users.root = {
