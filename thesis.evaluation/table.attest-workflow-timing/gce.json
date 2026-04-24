@@ -1,0 +1,123 @@
+{
+  "run_count": 100,
+  "total": {
+    "count": 100,
+    "mean_ms": 5737,
+    "median_ms": 5563,
+    "p90_ms": 6508,
+    "min_ms": 4573,
+    "max_ms": 10543
+  },
+  "steps": [
+    {
+      "name": "Getting evidence",
+      "count": 100,
+      "mean_ms": 2691,
+      "median_ms": 2639,
+      "p90_ms": 3060,
+      "min_ms": 2350,
+      "max_ms": 3395,
+      "substeps": [
+        {
+          "name": "Get Additional Artifacts",
+          "count": 100,
+          "mean_ms": 444,
+          "median_ms": 380,
+          "p90_ms": 752,
+          "min_ms": 238,
+          "max_ms": 1200
+        },
+        {
+          "name": "Get Evidence",
+          "count": 100,
+          "mean_ms": 2246,
+          "median_ms": 2236,
+          "p90_ms": 2364,
+          "min_ms": 2102,
+          "max_ms": 2582
+        }
+      ]
+    },
+    {
+      "name": "Getting trusted certificates from AMD",
+      "count": 100,
+      "mean_ms": 1000,
+      "median_ms": 980,
+      "p90_ms": 1184,
+      "min_ms": 720,
+      "max_ms": 2624
+    },
+    {
+      "name": "Getting trusted certificates from GCE",
+      "count": 100,
+      "mean_ms": 543,
+      "median_ms": 508,
+      "p90_ms": 659,
+      "min_ms": 257,
+      "max_ms": 1436
+    },
+    {
+      "name": "Verifying the signature of the hardware evidence",
+      "count": 100,
+      "mean_ms": 22,
+      "median_ms": 10,
+      "p90_ms": 41,
+      "min_ms": 2,
+      "max_ms": 331
+    },
+    {
+      "name": "Verifying freshness of the hardware evidence",
+      "count": 100,
+      "mean_ms": 2,
+      "median_ms": 1,
+      "p90_ms": 4,
+      "min_ms": 0,
+      "max_ms": 14
+    },
+    {
+      "name": "Getting endorsed artifacts for hardware evidence measurement verification",
+      "count": 100,
+      "mean_ms": 1457,
+      "median_ms": 1316,
+      "p90_ms": 1752,
+      "min_ms": 820,
+      "max_ms": 5784
+    },
+    {
+      "name": "Verifying measurement of the hardware evidence",
+      "count": 100,
+      "mean_ms": 12,
+      "median_ms": 9,
+      "p90_ms": 15,
+      "min_ms": 5,
+      "max_ms": 80
+    },
+    {
+      "name": "Verifying the signature of the software evidence",
+      "count": 100,
+      "mean_ms": 6,
+      "median_ms": 3,
+      "p90_ms": 13,
+      "min_ms": 2,
+      "max_ms": 59
+    },
+    {
+      "name": "Verifying freshness of the software evidence",
+      "count": 100,
+      "mean_ms": 2,
+      "median_ms": 1,
+      "p90_ms": 1,
+      "min_ms": 0,
+      "max_ms": 87
+    },
+    {
+      "name": "Verifying measurement of the software evidence",
+      "count": 100,
+      "mean_ms": 2,
+      "median_ms": 1,
+      "p90_ms": 2,
+      "min_ms": 0,
+      "max_ms": 48
+    }
+  ]
+}
