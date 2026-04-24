@@ -46,3 +46,6 @@ pub const DEBUG: bool = true;
 
 #[cfg(not(feature = "debug"))]
 pub const DEBUG: bool = false;
+
+#[cfg(feature = "request_certificate")]
+pub const CERTIFICATE_ISSUER_ENDPOINT: &str = env!("CERTIFICATE_ISSUER_ENDPOINT");

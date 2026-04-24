@@ -98,7 +98,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     #[cfg(feature = "request_certificate")]
     tokio::spawn(async {
-        if let Err(e) = init::request_certificate(env!("CERTIFICATE_ISSUER_ENDPOINT").trim()).await
+        if let Err(e) =
+            init::request_certificate(target_info::CERTIFICATE_ISSUER_ENDPOINT.trim()).await
         {
             error!("Failed to request certificate: {e}");
         }

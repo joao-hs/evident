@@ -5,11 +5,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    if cfg!(feature = "request_certificate") {
-        // Ensure the environment variable is set before compiling
-        env!("CERTIFICATE_ISSUER_ENDPOINT");
-    }
-
     let vmm_type_count = [cfg!(feature = "snp_ec2"), cfg!(feature = "snp_gce")]
         .iter()
         .filter(|&&x| x)
