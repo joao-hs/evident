@@ -6,7 +6,7 @@
 {
   image.repart = {
     name = "image";
-    version = "0.0.1";
+    version = "0.1.0";
 
     # This defines the actual partition layout.
     partitions = {

@@ -29,7 +29,7 @@ func NewDefaultReportInput(ip netip.Addr, cloudProvider domain.CloudServiceProvi
 		IpAddress:     ip.String(),
 		Timestamp:     time.Now().UTC().Format(time.RFC3339),
 		CloudProvider: cloudProvider.String(),
-		ClientVersion: "v0.0.1", // TODO: set dynamically based on build info
+		ClientVersion: "v0.1.0", // TODO: set dynamically based on build info
 
 		Q1:  s,
 		Q2:  s,

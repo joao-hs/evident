@@ -1,6 +1,6 @@
 module gitlab.com/dpss-inesc-id/achilles-cvm/client
 
-go 1.26.2
+go 1.26.0
 
 require (
 	cloud.google.com/go/storage v1.62.0
