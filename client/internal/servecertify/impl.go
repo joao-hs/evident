@@ -232,8 +232,36 @@ func (c *certificateIssuerVerifierServiceImpl) SubmitTrustedPackage(ctx context.
 			return nil, fmt.Errorf("failed to check destination package directory: %w", statErr)
 		}
 
-		if err := os.Rename(stagingDirPath, finalPackageDirPath); err != nil {
-			return nil, fmt.Errorf("failed to move trusted package to destination: %w", err)
+		entries, err := os.ReadDir(stagingDirPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read staging directory: %w", err)
+		}
+
+		if err := os.MkdirAll(finalPackageDirPath, 0o755); err != nil {
+			return nil, fmt.Errorf("failed to create destination directory: %w", err)
+		}
+
+		for _, entry := range entries {
+			srcPath := filepath.Join(stagingDirPath, entry.Name())
+			dstPath := filepath.Join(finalPackageDirPath, entry.Name())
+
+			info, err := entry.Info()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get file info for %s: %w", entry.Name(), err)
+			}
+
+			if info.IsDir() {
+				return nil, fmt.Errorf("subdirectories are not supported: %s", entry.Name())
+			}
+
+			input, err := os.ReadFile(srcPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read file %s: %w", srcPath, err)
+			}
+
+			if err := os.WriteFile(dstPath, input, info.Mode()); err != nil {
+				return nil, fmt.Errorf("failed to write file %s: %w", dstPath, err)
+			}
 		}
 		log.Get().Debugf("stored new trusted package at %s", finalPackageDirPath)
 	}
