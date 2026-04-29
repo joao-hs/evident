@@ -34,3 +34,4 @@ rustls = { version = "0.23.37", features = ["ring"] }
 tokio-rustls = { version = "0.26.4", features = ["ring"] }
 tower = { version = "0.5.3" }
 hyper-util = { version = "0.1.20" }
+base64 = { version = "0.22.1" }

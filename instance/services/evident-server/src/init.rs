@@ -6,6 +6,7 @@ use std::{
     task::{Context, Poll},
 };
 
+use base64::Engine;
 use common_core::{
     constants,
     proto::{
@@ -353,6 +354,20 @@ pub async fn request_certificate(target: &str) -> Result<(), Box<dyn std::error:
                 if !pem_chain.ends_with('\n') {
                     pem_chain.push('\n');
                 }
+            }
+            x if x == CertificateEncoding::Der as i32 => {
+                // Convert DER to PEM
+                let b64 = base64::engine::general_purpose::STANDARD;
+                let pem = b64.encode(cert.data.clone());
+                let pem_entry = format!(
+                    "-----BEGIN CERTIFICATE-----\n{}\n-----END CERTIFICATE-----\n",
+                    pem
+                );
+                // Ensure a single trailing newline between entries
+                if !pem_chain.is_empty() && !pem_chain.ends_with('\n') {
+                    pem_chain.push('\n');
+                }
+                pem_chain.push_str(&pem_entry);
             }
             _ => todo!(),
         }

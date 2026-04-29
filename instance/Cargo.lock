@@ -600,6 +600,7 @@ dependencies = [
 name = "evident-server"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "common-core",
  "digest 0.11.2",
  "env_logger",
