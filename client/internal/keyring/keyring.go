@@ -1,6 +1,6 @@
 package keyring
 
-//	/srv/evident/trusted-keys/
+//	/etc/evident/trusted-keys/
 //	├── entity1.pub.asc
 //	├── entity2.pub.asc
 //	└── ...
@@ -21,12 +21,12 @@ import (
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 )
 
-const trustedKeysDir = "/srv/evident/trusted-keys"
+const trustedKeysDir = "/etc/evident/trusted-keys"
 
 type Result struct {
 	// only true if the signature is valid
 	isValid bool
-	// only true if the signer is in /srv/evident/trusted-keys
+	// only true if the signer is in /etc/evident/trusted-keys
 	isTrusted bool
 	// 16-char fingerprint of the key
 	signerFingerprint string

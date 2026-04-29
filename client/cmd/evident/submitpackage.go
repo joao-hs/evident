@@ -43,3 +43,7 @@ var submitPackageCmd = &cobra.Command{
 func validatePackagePath(path string) (string, error) {
 	return validateToAbsFilepath(path, "package directory path")
 }
+
+func init() {
+	rootCmd.AddCommand(submitPackageCmd)
+}
