@@ -271,69 +271,26 @@ func (c *certificateIssuerVerifierServiceImpl) SubmitTrustedPackage(ctx context.
 		return nil, fmt.Errorf("failed to marshal package submission result: %w", err)
 	}
 
+	signature, err := crypto.SignECDSASignature(resultPayload, c.caKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign package submission result: %w", err)
+	}
+
+	signingKey, err := crypto.MarshalPublicKey(&c.caKey.PublicKey, c.caCerts[0])
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal signing key: %w", err)
+	}
+
 	return &pb.SignedPackageSubmissionResult{
 		SerializedPackageSubmissionResult: resultPayload,
-		Signature:                         nil, // TODO: sign response
-		SigningKey:                        nil, // TODO: include signer key
+		Signature:                         signature,
+		SigningKey:                        signingKey,
 	}, nil
 }
 
 const (
 	trustedPackagesStagingDirPath = "/tmp/evident/trusted-packages"
 )
-
-type gpgSignatureVerificationResult struct {
-	isValid     bool
-	isTrusted   bool
-	signerKeyID string
-}
-
-// func (c *certificateIssuerVerifierServiceImpl) verifyManifestSignatureWithGPG(sigPath string, manifestPath string) (*gpgSignatureVerificationResult, error) {
-// 	cmd := exec.Command(c.gpgCmd, "--batch", "--status-fd=1", "--verify", sigPath, manifestPath)
-
-// 	statusOutput, err := cmd.CombinedOutput()
-// 	statusLines := strings.Split(string(statusOutput), "\n")
-
-// 	result := &gpgSignatureVerificationResult{}
-// 	for _, line := range statusLines {
-// 		line = strings.TrimSpace(line)
-// 		if !strings.HasPrefix(line, "[GNUPG:] ") {
-// 			continue
-// 		}
-
-// 		fields := strings.Fields(strings.TrimPrefix(line, "[GNUPG:] "))
-// 		if len(fields) == 0 {
-// 			continue
-// 		}
-
-// 		switch fields[0] {
-// 		case "VALIDSIG":
-// 			result.isValid = true
-// 			if len(fields) > 1 {
-// 				fingerprint := strings.ToUpper(fields[1])
-// 				if len(fingerprint) >= 16 {
-// 					candidate := fingerprint[len(fingerprint)-16:]
-// 					if keyID, keyErr := sanitize.KeyId(candidate); keyErr == nil {
-// 						result.signerKeyID = strings.ToUpper(keyID)
-// 					}
-// 				}
-// 			}
-// 		case "TRUST_ULTIMATE", "TRUST_FULLY", "TRUST_MARGINAL":
-// 			result.isTrusted = true
-// 		}
-// 	}
-
-// 	if !result.isValid {
-// 		if err == nil {
-// 			return result, nil
-// 		}
-// 		return result, nil
-// 	}
-
-// 	// If GPG declared a valid signature, ignore non-zero exit codes that may be
-// 	// caused by trust warnings; trust is handled via status parsing above.
-// 	return result, nil
-// }
 
 func (c *certificateIssuerVerifierServiceImpl) RequestInstanceKeyAttestationCertificate(ctx context.Context, request *pb.SignedAdditionalArtifactsBundle) (*pb.SignedCertificateChain, error) {
 	var (
@@ -450,10 +407,20 @@ func (c *certificateIssuerVerifierServiceImpl) RequestInstanceKeyAttestationCert
 		return nil, fmt.Errorf("failed to marshal certificate chain: %w", err)
 	}
 
+	signature, err := crypto.SignECDSASignature(certChainBytes, c.caKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign certificate chain: %w", err)
+	}
+
+	signingKey, err := crypto.MarshalPublicKey(&c.caKey.PublicKey, c.caCerts[0])
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal signing key: %w", err)
+	}
+
 	return &pb.SignedCertificateChain{
 		SerializedCertificateChain: certChainBytes,
-		Signature:                  nil, // TODO: sign the certificate chain
-		SigningKey:                 nil, // TODO: include the signing key or its identifier
+		Signature:                  signature,
+		SigningKey:                 signingKey,
 	}, nil
 }
 

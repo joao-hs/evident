@@ -17,6 +17,7 @@ use common_core::{
     },
 };
 use hyper_util::rt::TokioIo;
+use log::{debug, info};
 use p384::{
     PublicKey,
     ecdsa::{Signature, SigningKey, VerifyingKey, signature::Signer},
@@ -156,6 +157,8 @@ impl Service<Uri> for TemporarySkipVerifyTlsConnector {
 }
 
 pub async fn request_certificate(target: &str) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Starting certificate request flow");
+    debug!("Target endpoint: {target}");
     // 1. Build the "SignedAdditionalArtifactsBundle" message
     //  - Needs the instance's key pair
     //  - Needs to serialize a "AdditionalArtifactsBundle" message
@@ -166,11 +169,19 @@ pub async fn request_certificate(target: &str) -> Result<(), Box<dyn std::error:
     //    - Needs to construct the "CSR" message with the instance's certificate signing request
     //    - Needs to construct the "Certificate" message with the gRPC's TLS certificate
     let request = {
+        debug!(
+            "Loading instance private key from {}",
+            constants::INSTANCE_PRIVATE_KEY_PATH
+        );
         let instance_private_key = {
             let bytes = fs::read(constants::INSTANCE_PRIVATE_KEY_PATH)?;
             SigningKey::from_pkcs8_der(bytes.as_slice())
         }?;
 
+        debug!(
+            "Loading instance public key from {}",
+            constants::INSTANCE_PUBLIC_KEY_PATH
+        );
         let instance_pub_key = {
             let bytes = fs::read(constants::INSTANCE_PUBLIC_KEY_PATH)?;
             PublicKey::from_public_key_der(&bytes)
@@ -184,12 +195,20 @@ pub async fn request_certificate(target: &str) -> Result<(), Box<dyn std::error:
             key_params: Some(KeyParams::EllipticCurve(EllipticCurve::P384.into())),
         };
 
+        debug!(
+            "Loading instance CSR from {}",
+            constants::INSTANCE_CERTIFICATE_SIGNING_REQUEST_PATH
+        );
         let csr_proto = Csr {
             data: fs::read(constants::INSTANCE_CERTIFICATE_SIGNING_REQUEST_PATH)?,
             encoding: CsrEncoding::Pem.into(),
             format: CsrFormat::Pkcs10.into(),
         };
 
+        debug!(
+            "Loading gRPC TLS certificate from {}",
+            constants::GRPC_EVIDENT_SERVER_CERTIFICATE_PATH
+        );
         let grpc_tls_cert_proto = Certificate {
             r#type: CertificateType::X509.into(),
             encoding: CertificateEncoding::Pem.into(),
@@ -197,16 +216,19 @@ pub async fn request_certificate(target: &str) -> Result<(), Box<dyn std::error:
         };
 
         #[cfg(feature = "snp_ec2")]
-        let make_credential_input = Some(MakeCredentialInputBundle {
-            tpm_endorsement_key: Some(proto::PublicKey {
-                algorithm: KeyAlgorithm::Ec.into(),
-                encoding: KeyEncoding::SpkiDer.into(),
-                key_data: collectors::get_ek_pub_key().await?,
-                certificate: None,
-                key_params: Some(KeyParams::EllipticCurve(EllipticCurve::P384.into())),
-            }),
-            tpm_attestation_key_name: collectors::get_ak_key_name().await?,
-        });
+        let make_credential_input = {
+            debug!("Collecting TPM endorsement key and AK key name");
+            Some(MakeCredentialInputBundle {
+                tpm_endorsement_key: Some(proto::PublicKey {
+                    algorithm: KeyAlgorithm::Ec.into(),
+                    encoding: KeyEncoding::SpkiDer.into(),
+                    key_data: collectors::get_ek_pub_key().await?,
+                    certificate: None,
+                    key_params: Some(KeyParams::EllipticCurve(EllipticCurve::P384.into())),
+                }),
+                tpm_attestation_key_name: collectors::get_ak_key_name().await?,
+            })
+        };
 
         #[cfg(not(feature = "snp_ec2"))]
         let make_credential_input = None;
@@ -219,8 +241,10 @@ pub async fn request_certificate(target: &str) -> Result<(), Box<dyn std::error:
             grpc_server_certificate: Some(grpc_tls_cert_proto),
         };
 
+        debug!("Serializing additional artifacts bundle");
         let serialized_additional_artifacts_bundle =
             additional_artifacts_bundle_proto.encode_to_vec();
+        debug!("Signing additional artifacts bundle");
         let signature = {
             let sig: Signature =
                 instance_private_key.sign(serialized_additional_artifacts_bundle.as_slice());
@@ -235,19 +259,33 @@ pub async fn request_certificate(target: &str) -> Result<(), Box<dyn std::error:
     };
 
     // 2. Call the gRPC "RequestInstanceKeyAttestationCertificate"
-    let channel = Endpoint::try_from(target.to_owned())?
+    info!("Connecting to certificate issuer over gRPC");
+    // must have "http://" scheme for tonic's Endpoint
+    // in practice, the custom connector will do its own TLS
+    // the server is running gRPC with TLS, and it is oblivious to
+    // the customer connector existance.
+    let target_with_scheme = if target.starts_with("http://") {
+        target.to_owned()
+    } else if target.starts_with("https://") {
+        target.replacen("https://", "http://", 1)
+    } else {
+        format!("http://{target}")
+    };
+    let channel = Endpoint::try_from(target_with_scheme)?
         // .tls_config(ClientTlsConfig::new())?
         .connect_with_connector(TemporarySkipVerifyTlsConnector::new())
         .await?;
 
     let mut client = CertificateIssuerVerifierServiceClient::new(channel);
 
+    info!("Requesting instance key attestation certificate");
     let response = client
         .request_instance_key_attestation_certificate(request)
         .await
         .map_err(|e| format!("gRPC request failed: {:#?}", e))?;
 
     // 3. Validate the response's signature
+    info!("Validating response signature");
     let signed_cert_chain = response.into_inner();
     let cert_chain_bytes = signed_cert_chain.serialized_certificate_chain;
     match signed_cert_chain.signing_key {
@@ -274,13 +312,15 @@ pub async fn request_certificate(target: &str) -> Result<(), Box<dyn std::error:
     // 4. Process the response
     //  - Contains a list of certificates that represent a certificate chain for the instance's public key
     //  - Needs to verify the certificate chain and store it in the filesystem
+    info!("Decoding certificate chain");
     let cert_chain = CertificateChain::decode(cert_chain_bytes.as_ref())?.certificates;
     if cert_chain.is_empty() {
         return Err("certificate chain is empty".into());
     }
 
     let mut pem_chain = String::new();
-    for cert in cert_chain.iter() {
+    for (index, cert) in cert_chain.iter().enumerate() {
+        debug!("Processing certificate {} in chain", index + 1);
         match cert.encoding {
             x if x == CertificateEncoding::Pem as i32 => {
                 // Assume the data is already PEM; append as UTF-8
@@ -299,9 +339,15 @@ pub async fn request_certificate(target: &str) -> Result<(), Box<dyn std::error:
     }
 
     // Write the concatenated PEM chain to disk
+    info!(
+        "Writing certificate chain to {}",
+        constants::INSTANCE_CERTIFICATE_PATH
+    );
     fs::write(constants::INSTANCE_CERTIFICATE_PATH, pem_chain.as_bytes())?;
 
     // 4. Notify systemd that the service is ready
+    info!("Notifying systemd that the service is ready");
     sd_notify::notify(false, &[sd_notify::NotifyState::Ready])?;
+    info!("Certificate request flow completed");
     Ok(())
 }

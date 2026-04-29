@@ -119,6 +119,6 @@ in
     optionalFeatures = [
       "request_certificate"
     ];
-    certificateIssuerEndpoint = "https://ca.example.com";
+    certificateIssuerEndpoint = "ca.example.com:433";
   };
 }

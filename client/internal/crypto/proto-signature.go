@@ -3,6 +3,7 @@ package crypto
 import (
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/rand"
 	"crypto/rsa"
 	"errors"
 	"fmt"
@@ -118,4 +119,68 @@ func verifyRSASignature(data, signature []byte, key *rsa.PublicKey, hashFunc cry
 	}
 
 	return true, nil
+}
+
+// SignECDSASignature signs data using ECDSA and returns the ASN.1 DER-encoded signature.
+//
+// Hash selection policy:
+//   - ECDSA P-256 -> SHA-256
+//   - ECDSA P-384 -> SHA-384
+//   - ECDSA P-521 -> SHA-512
+func SignECDSASignature(data []byte, privateKey *ecdsa.PrivateKey) ([]byte, error) {
+	if data == nil {
+		return nil, errors.New("data must not be nil")
+	}
+	if privateKey == nil {
+		return nil, errors.New("private key must not be nil")
+	}
+
+	hashFunc, err := ecdsaHashForCurve(&privateKey.PublicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	digest, err := hash(data, hashFunc)
+	if err != nil {
+		return nil, err
+	}
+
+	sig, err := ecdsa.SignASN1(rand.Reader, privateKey, digest)
+	if err != nil {
+		return nil, fmt.Errorf("ECDSA signing error: %w", err)
+	}
+
+	return sig, nil
+}
+
+// SignRSASignature signs data using RSA PKCS#1 v1.5 and returns the signature.
+//
+// Hash selection policy:
+//   - RSA 2048 -> SHA-256
+//   - RSA 3072 -> SHA-384
+//   - RSA 4096 -> SHA-512
+func SignRSASignature(data []byte, privateKey *rsa.PrivateKey) ([]byte, error) {
+	if data == nil {
+		return nil, errors.New("data must not be nil")
+	}
+	if privateKey == nil {
+		return nil, errors.New("private key must not be nil")
+	}
+
+	hashFunc, err := rsaHashForBits(privateKey.Size() * 8)
+	if err != nil {
+		return nil, err
+	}
+
+	digest, err := hash(data, hashFunc)
+	if err != nil {
+		return nil, err
+	}
+
+	sig, err := rsa.SignPKCS1v15(rand.Reader, privateKey, hashFunc, digest)
+	if err != nil {
+		return nil, fmt.Errorf("RSA signing error: %w", err)
+	}
+
+	return sig, nil
 }
