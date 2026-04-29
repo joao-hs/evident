@@ -49,6 +49,7 @@ type packages struct {
 func LoadTrustedPackages() (Packages, error) {
 	// TODO: allow other locations
 	// assuming trusted packages are under /etc/evident/trusted-packages
+	log.Get().Debugf("loading trusted packages from %s", TrustedPackagesDirPath)
 	err := assertPackagesDir()
 	if err != nil {
 		return nil, err
@@ -63,6 +64,7 @@ func LoadTrustedPackages() (Packages, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Get().Debugf("found %d entries under trusted packages directory", len(entries))
 
 	pkgIndex := make(map[string]Package)
 
@@ -84,6 +86,7 @@ func LoadTrustedPackages() (Packages, error) {
 			continue
 		}
 
+		log.Get().Debugf("loaded trusted package %s", finalPcrDigest)
 		pkgIndex[finalPcrDigest] = loaded
 	}
 
@@ -107,6 +110,7 @@ func (p *pkg) GetExpectedPcrs() (*domain.ExpectedPcrDigests, error) {
 }
 
 func loadPackage(pkgDirPath string, kr keyring.TrustedImageDistributorKeyRing) (Package, error) {
+	log.Get().Debugf("loading package from %s", pkgDirPath)
 	dirInfo, err := os.Stat(pkgDirPath)
 	if err != nil {
 		return nil, fmt.Errorf("cannot stat package directory: %w", err)
@@ -124,10 +128,12 @@ func loadPackage(pkgDirPath string, kr keyring.TrustedImageDistributorKeyRing) (
 	if err != nil {
 		return nil, err
 	}
+	log.Get().Debugf("found %d signature file(s) in %s", len(sigPaths), pkgDirPath)
 
 	if err := verifyAnySignature(manifestPath, sigPaths, kr); err != nil {
 		return nil, err
 	}
+	log.Get().Debug("validated manifest signature")
 
 	digests, err := loadExpectedPcrs(filepath.Join(pkgDirPath, ExpectedPcrsFileName))
 	if err != nil {
@@ -183,6 +189,8 @@ func findSigFiles(dir string) ([]string, error) {
 		return nil, fmt.Errorf("no signature files found in %s", dir)
 	}
 
+	log.Get().Debugf("signature files discovered in %s: %d", dir, len(sigs))
+
 	return sigs, nil
 }
 
@@ -198,6 +206,7 @@ func verifyAnySignature(manifestPath string, sigPaths []string, kr keyring.Trust
 				log.Get().Warnf("signature %s is valid but untrusted", filepath.Base(sigPath))
 				continue
 			}
+			log.Get().Debugf("trusted signature verified: %s", filepath.Base(sigPath))
 			return nil
 		}
 		log.Get().Warnf("signature %s is invalid", filepath.Base(sigPath))

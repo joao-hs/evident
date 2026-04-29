@@ -9,6 +9,7 @@ import (
 
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/config"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/crypto"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/grpc"
 	pb "gitlab.com/dpss-inesc-id/achilles-cvm/client/pb/evident_protocol/v1"
 	"google.golang.org/protobuf/proto"
@@ -31,6 +32,7 @@ func NewPackageSubmitter(targetAddrPort netip.AddrPort) (PackageSubmitter, error
 		return nil, err
 	}
 
+	log.Get().Debugf("initialized package submitter for %s", cfg.Addr)
 	return &packageSubmitter{
 		ctx:    context.Background(),
 		client: client,
@@ -44,6 +46,7 @@ const (
 )
 
 func (p *packageSubmitter) SubmitPackage(packageDirPath string) error {
+	log.Get().Debugf("submitting package from directory: %s", packageDirPath)
 	// 1. Check if the necessary files are present in the package directory
 	// Expected:
 	/*
@@ -58,6 +61,7 @@ func (p *packageSubmitter) SubmitPackage(packageDirPath string) error {
 	if !fileExists(expectedPcrsFilePath) {
 		return fmt.Errorf("expected PCRs file is missing in package directory: %s", expectedPcrsFilePath)
 	}
+	log.Get().Debugf("found expected PCRs file: %s", expectedPcrsFilePath)
 	serializedPcrsData, err := os.ReadFile(expectedPcrsFilePath)
 	if err != nil {
 		return fmt.Errorf("error while reading expected PCRs file in package directory: %w", err)
@@ -67,6 +71,7 @@ func (p *packageSubmitter) SubmitPackage(packageDirPath string) error {
 	if !fileExists(manifestFilePath) {
 		return fmt.Errorf("manifest file is missing in package directory: %s", manifestFilePath)
 	}
+	log.Get().Debugf("found manifest file: %s", manifestFilePath)
 	serializedManifestData, err := os.ReadFile(manifestFilePath)
 	if err != nil {
 		return fmt.Errorf("error while reading manifest file in package directory: %w", err)
@@ -79,9 +84,11 @@ func (p *packageSubmitter) SubmitPackage(packageDirPath string) error {
 	if len(signaturesFilePaths) == 0 {
 		return fmt.Errorf("no signature files found in package directory: %s", packageDirPath)
 	}
+	log.Get().Debugf("found %d signature files", len(signaturesFilePaths))
 
 	serializedSignaturesData := make([][]byte, 0, len(signaturesFilePaths))
 	for _, sigFilePath := range signaturesFilePaths {
+		log.Get().Debugf("reading signature file: %s", sigFilePath)
 		if !fileExists(sigFilePath) {
 			return fmt.Errorf("signature file is missing in package directory: %s", sigFilePath)
 		}
@@ -98,9 +105,11 @@ func (p *packageSubmitter) SubmitPackage(packageDirPath string) error {
 		SerializedManifest:             serializedManifestData,
 		SerializedManifestSignature:    serializedSignaturesData,
 	}
+	log.Get().Debugf("assembled package submission request: manifest=%d bytes signatures=%d expected-measurements=%d bytes", len(serializedManifestData), len(serializedSignaturesData), len(serializedPcrsData))
 
 	// 3. Send the message
 	signedResp, err := p.client.SubmitPackage(p.ctx, &req)
+	log.Get().Debug("package submission request sent")
 	if err != nil {
 		return fmt.Errorf("error while submitting package: %w", err)
 	}
@@ -142,6 +151,7 @@ func (p *packageSubmitter) SubmitPackage(packageDirPath string) error {
 	if !ok {
 		return fmt.Errorf("invalid signature in response to package submission")
 	}
+	log.Get().Debug("package submission response signature verified")
 
 	// 5. Unmarshal the package submission result and check the status
 	submissionResult := &pb.PackageSubmissionResult{}
@@ -152,6 +162,7 @@ func (p *packageSubmitter) SubmitPackage(packageDirPath string) error {
 	if !submissionResult.Success {
 		return fmt.Errorf("package submission failed with message")
 	}
+	log.Get().Debug("package submission acknowledged as successful")
 	return nil
 }
 

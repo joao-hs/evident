@@ -62,11 +62,13 @@ func (p *packager) checkRequiredExternalCommands() error {
 	if err != nil {
 		return fmt.Errorf("`nix` command is not present in PATH")
 	}
+	log.Get().Debugf("using nix command at %s", p.nixCmd)
 
 	p.gpgCmd, err = exec.LookPath("gpg")
 	if err != nil {
 		return fmt.Errorf("`gpg` command is not present in PATH")
 	}
+	log.Get().Debugf("using gpg command at %s", p.gpgCmd)
 
 	return nil
 }
@@ -77,8 +79,10 @@ func (p *packager) tryGetKeyId() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	log.Get().Debugf("found %d GPG secret key(s)", len(keys))
 
 	if len(keys) == 1 {
+		log.Get().Debugf("using GPG key %s", keys[0])
 		return keys[0], nil
 	}
 
@@ -101,6 +105,7 @@ func (p *packager) Package(flakePath string, variation string, outputDirPath str
 	var err error
 
 	tmpOutputDirPath := "/tmp/evident/evident-packaging-output" + fmt.Sprintf("%d", os.Getpid())
+	log.Get().Debugf("using temporary packaging directory: %s", tmpOutputDirPath)
 
 	err = os.MkdirAll(tmpOutputDirPath, 0755)
 	if err != nil {
@@ -111,6 +116,7 @@ func (p *packager) Package(flakePath string, variation string, outputDirPath str
 
 	// 1. build image to outputDirPath/disk.raw
 	log.Get().Infoln("Building VM image...")
+	log.Get().Debugf("build inputs: flake=%s variation=%s output=%s", flakePath, variation, filepath.Join(tmpOutputDirPath, "disk.raw"))
 	err = p.vmImageBuilder.BuildImage(
 		flakePath,
 		variation,
@@ -122,6 +128,7 @@ func (p *packager) Package(flakePath string, variation string, outputDirPath str
 
 	// 2. measure image and write expected PCRs to outputDirPath/expected-pcrs.json
 	log.Get().Infoln("Measuring VM image...")
+	log.Get().Debugf("measuring disk image at %s", filepath.Join(tmpOutputDirPath, "disk.raw"))
 	expectedPcrs, err := p.vmImageMeasurer.MeasureImage(
 		filepath.Join(tmpOutputDirPath, "disk.raw"),
 	)
@@ -145,6 +152,7 @@ func (p *packager) Package(flakePath string, variation string, outputDirPath str
 
 	// 3. create and save manifest file to outputDirPath/MANIFEST
 	log.Get().Infoln("Creating manifest file...")
+	log.Get().Debugf("collecting manifest metadata for repo=%s commit=%s", repoUrl, commitHash)
 	nixVersion, err := p.getNixVersion()
 	if err != nil {
 		return err
@@ -210,6 +218,7 @@ func (p *packager) Package(flakePath string, variation string, outputDirPath str
 	// 4. sign manifest file and save the signature to outputDirPath/<signing-pub-key-id>.sig.asc
 	log.Get().Infof("Signing manifest file with key %s...", p.keyId)
 	signatureFilePath := filepath.Join(tmpOutputDirPath, fmt.Sprintf("%s.sig.asc", p.keyId))
+	log.Get().Debugf("signature output path: %s", signatureFilePath)
 	signCmd := exec.Command(p.gpgCmd, "--output", signatureFilePath, "--local-user", p.keyId, "--armor", "--detach-sign", manifestFilePath)
 	var signStderr bytes.Buffer
 	signCmd.Stdin = os.Stdin
@@ -244,6 +253,7 @@ func (p *packager) Package(flakePath string, variation string, outputDirPath str
 	if err != nil {
 		return err
 	}
+	log.Get().Debugf("computed package digest: %s", digest)
 	packageDirName := fmt.Sprintf("%s.package", digest)
 	packageDirPath := filepath.Join(outputDirPath, packageDirName)
 	log.Get().Infoln("Packaging files")

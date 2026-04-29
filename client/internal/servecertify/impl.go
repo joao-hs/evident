@@ -22,6 +22,7 @@ import (
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/crypto"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/domain"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/keyring"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/packager"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/sanitize"
@@ -48,6 +49,8 @@ func (c *certificateIssuerVerifierServiceImpl) SubmitTrustedPackage(ctx context.
 	var err error
 	_ = ctx
 
+	log.Get().Debugf("received trusted package submission: manifest=%d bytes, signatures=%d, expected-measurements=%d bytes", len(request.SerializedManifest), len(request.SerializedManifestSignature), len(request.SerializedExpectedMeasurements))
+
 	if len(request.SerializedManifest) == 0 {
 		return nil, fmt.Errorf("missing serialized manifest")
 	}
@@ -69,6 +72,7 @@ func (c *certificateIssuerVerifierServiceImpl) SubmitTrustedPackage(ctx context.
 	if err != nil {
 		return nil, fmt.Errorf("failed to compute expected digest from expected measurements: %w", err)
 	}
+	log.Get().Debugf("computed expected digest for submission: %s", finalExpectedDigest)
 
 	// 2. Create staging directory for the package
 
@@ -83,6 +87,7 @@ func (c *certificateIssuerVerifierServiceImpl) SubmitTrustedPackage(ctx context.
 	if err != nil {
 		return nil, fmt.Errorf("failed to create package staging directory: %w", err)
 	}
+	log.Get().Debugf("created staging directory for package submission: %s", stagingDirPath)
 	defer func() {
 		_ = os.RemoveAll(stagingDirPath)
 	}()
@@ -101,6 +106,7 @@ func (c *certificateIssuerVerifierServiceImpl) SubmitTrustedPackage(ctx context.
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse manifest: %w", err)
 	}
+	log.Get().Debugf("parsed manifest for %s", manifest.SourceCommit)
 
 	// 3. Verify that the manifest's declared MOUT hash matches the expected measurements
 
@@ -119,8 +125,10 @@ func (c *certificateIssuerVerifierServiceImpl) SubmitTrustedPackage(ctx context.
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize keyring: %w", err)
 	}
+	log.Get().Debug("initialized keyring for signature verification")
 
 	for i, sig := range request.SerializedManifestSignature {
+		log.Get().Debugf("verifying manifest signature %d", i)
 		rawSigPath := filepath.Join(stagingDirPath, fmt.Sprintf("incoming-%d.sig.asc", i))
 		if err := os.WriteFile(rawSigPath, sig, 0o644); err != nil {
 			return nil, fmt.Errorf("failed to write signature %d: %w", i, err)
@@ -158,6 +166,7 @@ func (c *certificateIssuerVerifierServiceImpl) SubmitTrustedPackage(ctx context.
 	if !hasTrustedSignature {
 		return nil, fmt.Errorf("no signature is both valid and trusted")
 	}
+	log.Get().Debugf("validated %d manifest signatures (trusted=%v)", len(validSignatureFileNames), hasTrustedSignature)
 
 	// 5. Move staged package to final location
 
@@ -171,6 +180,7 @@ func (c *certificateIssuerVerifierServiceImpl) SubmitTrustedPackage(ctx context.
 	// otherwise, move the staged package to the final location
 
 	if info, statErr := os.Stat(finalPackageDirPath); statErr == nil {
+		log.Get().Debugf("existing trusted package found at %s; validating contents", finalPackageDirPath)
 		if !info.IsDir() {
 			return nil, fmt.Errorf("destination path exists and is not a directory: %s", finalPackageDirPath)
 		}
@@ -192,6 +202,7 @@ func (c *certificateIssuerVerifierServiceImpl) SubmitTrustedPackage(ctx context.
 		}
 
 		for _, sigName := range validSignatureFileNames {
+			log.Get().Debugf("checking signature %s against existing package", sigName)
 			srcSigPath := filepath.Join(stagingDirPath, sigName)
 			dstSigPath := filepath.Join(finalPackageDirPath, sigName)
 
@@ -224,6 +235,7 @@ func (c *certificateIssuerVerifierServiceImpl) SubmitTrustedPackage(ctx context.
 		if err := os.Rename(stagingDirPath, finalPackageDirPath); err != nil {
 			return nil, fmt.Errorf("failed to move trusted package to destination: %w", err)
 		}
+		log.Get().Debugf("stored new trusted package at %s", finalPackageDirPath)
 	}
 
 	resultPayload, err := proto.Marshal(&pb.PackageSubmissionResult{Success: true})
@@ -301,6 +313,8 @@ func (c *certificateIssuerVerifierServiceImpl) RequestInstanceKeyAttestationCert
 		err error
 	)
 
+	log.Get().Debugf("received certificate request: artifacts=%d bytes", len(request.SerializedAdditionalArtifactsBundle))
+
 	signingKeyEc, signingKeyRsa, err := crypto.ParsePublicKey(request.SigningKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse signing key: %w", err)
@@ -324,6 +338,7 @@ func (c *certificateIssuerVerifierServiceImpl) RequestInstanceKeyAttestationCert
 	if !ok {
 		return nil, fmt.Errorf("signature verification failed")
 	}
+	log.Get().Debug("additional artifacts bundle signature verified")
 
 	clientPeer, ok := peer.FromContext(ctx)
 	if !ok {
@@ -334,6 +349,7 @@ func (c *certificateIssuerVerifierServiceImpl) RequestInstanceKeyAttestationCert
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse client address: %w", err)
 	}
+	log.Get().Debugf("client address resolved: %s", clientAddrStr)
 
 	targetAddr, err := sanitize.TargetIP(clientAddrStr)
 	if err != nil {
@@ -347,6 +363,7 @@ func (c *certificateIssuerVerifierServiceImpl) RequestInstanceKeyAttestationCert
 	}
 
 	target := additionalArtifactsBundle.TargetType
+	log.Get().Debugf("attestation target type: %s", target.String())
 	var verifier attest.Verifier
 	switch target {
 	case pb.TargetType_TARGET_TYPE_SNP_EC2:
@@ -379,6 +396,7 @@ func (c *certificateIssuerVerifierServiceImpl) RequestInstanceKeyAttestationCert
 	if err != nil {
 		return nil, err
 	}
+	log.Get().Debugf("attestation succeeded for %s", targetAddr.String())
 
 	csr := additionalArtifactsBundle.GetInstanceCsr()
 	if csr == nil {
@@ -397,6 +415,7 @@ func (c *certificateIssuerVerifierServiceImpl) RequestInstanceKeyAttestationCert
 	if err != nil {
 		return nil, fmt.Errorf("failed to issue certificate: %w", err)
 	}
+	log.Get().Debug("issued certificate chain for client")
 
 	certChainBytes, err := proto.Marshal(certChain)
 	if err != nil {
