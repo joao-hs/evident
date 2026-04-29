@@ -34,6 +34,10 @@ use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 use tonic::transport::{CertificateDer, Endpoint, Uri};
 use tower::Service;
+use x509_parser::{
+    pem::parse_x509_pem,
+    prelude::{FromDer, X509Certificate},
+};
 
 use crate::{collectors, target_info::TARGET_TYPE_PROTO};
 
@@ -187,11 +191,27 @@ pub async fn request_certificate(target: &str) -> Result<(), Box<dyn std::error:
             PublicKey::from_public_key_der(&bytes)
         }?;
 
+        debug!(
+            "Loading instance self-signed certificate from {}",
+            constants::INSTANCE_SELF_SIGNED_CERTIFICATE_PATH
+        );
+        let instance_certificate_der: Vec<u8> = {
+            let cert_pem_bytes = fs::read(constants::INSTANCE_SELF_SIGNED_CERTIFICATE_PATH)?;
+            let (_, cert_pem) = parse_x509_pem(cert_pem_bytes.as_slice())?;
+            let (_, cert_der) = X509Certificate::from_der(&cert_pem.contents)?;
+            cert_der.as_raw().to_vec()
+        };
+        let instance_certificate = proto::Certificate {
+            r#type: proto::CertificateType::X509.into(),
+            encoding: proto::CertificateEncoding::Der.into(),
+            data: instance_certificate_der,
+        };
+
         let instance_pub_key_proto = proto::PublicKey {
             algorithm: KeyAlgorithm::Ec.into(),
             encoding: KeyEncoding::SpkiDer.into(),
             key_data: instance_pub_key.to_public_key_der()?.to_vec(),
-            certificate: None,
+            certificate: Some(instance_certificate),
             key_params: Some(KeyParams::EllipticCurve(EllipticCurve::P384.into())),
         };
 

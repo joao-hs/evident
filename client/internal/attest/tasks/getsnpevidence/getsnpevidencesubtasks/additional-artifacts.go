@@ -161,7 +161,7 @@ func ValidateAdditionalArtifactsBundle(
 
 	outputInstanceKeyCertProto := outputInstanceKey.GetCertificate()
 	if outputInstanceKeyCertProto == nil {
-		log.Get().Warnln("Instance key certificate is missing in additional artifacts bundle, skipping storing it in dot")
+		err = fmt.Errorf("instance key certificate is missing in additional artifacts bundle")
 		return
 	}
 
