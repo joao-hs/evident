@@ -4,6 +4,8 @@ import (
 	"crypto/ecdsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -77,9 +79,26 @@ func validateCaCertPath(path string) ([]*x509.Certificate, error) {
 		return nil, err
 	}
 
-	caCerts, err := x509.ParseCertificates(caCertBytes)
-	if err != nil {
-		return nil, err
+	var caCerts []*x509.Certificate
+	remaining := caCertBytes
+	for {
+		var block *pem.Block
+		block, remaining = pem.Decode(remaining)
+		if block == nil {
+			break
+		}
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		caCerts = append(caCerts, cert)
+	}
+
+	if len(caCerts) == 0 {
+		return nil, fmt.Errorf("no PEM certificates found in CA cert path")
 	}
 
 	return caCerts, nil
@@ -96,12 +115,17 @@ func validateCAKeyPath(path string) (*ecdsa.PrivateKey, error) {
 		return &ecdsa.PrivateKey{}, err
 	}
 
-	privateKey, err := x509.ParseECPrivateKey(privateKeyBytes)
+	privateKey, err := x509.ParsePKCS8PrivateKey(privateKeyBytes)
 	if err != nil {
 		return &ecdsa.PrivateKey{}, err
 	}
 
-	return privateKey, nil
+	ecdsaPrivateKey, ok := privateKey.(*ecdsa.PrivateKey)
+	if !ok {
+		return &ecdsa.PrivateKey{}, fmt.Errorf("CA key is not an ECDSA private key")
+	}
+
+	return ecdsaPrivateKey, nil
 }
 
 func validateGRPCCertPath(path string) (string, error) {

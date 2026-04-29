@@ -188,12 +188,16 @@ func findSigFiles(dir string) ([]string, error) {
 
 func verifyAnySignature(manifestPath string, sigPaths []string, kr keyring.TrustedImageDistributorKeyRing) error {
 	for _, sigPath := range sigPaths {
-		valid, err := kr.VerifyDetached(sigPath, manifestPath)
+		result, err := kr.VerifyDetached(sigPath, manifestPath)
 		if err != nil {
 			log.Get().Warnf("could not verify signature %s: %v", filepath.Base(sigPath), err)
 			continue
 		}
-		if valid {
+		if result.IsValid() {
+			if !result.IsTrusted() {
+				log.Get().Warnf("signature %s is valid but untrusted", filepath.Base(sigPath))
+				continue
+			}
 			return nil
 		}
 		log.Get().Warnf("signature %s is invalid", filepath.Base(sigPath))

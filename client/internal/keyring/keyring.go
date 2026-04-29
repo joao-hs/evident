@@ -23,14 +23,37 @@ import (
 
 const trustedKeysDir = "/srv/evident/trusted-keys"
 
+type Result struct {
+	// only true if the signature is valid
+	isValid bool
+	// only true if the signer is in /srv/evident/trusted-keys
+	isTrusted bool
+	// 16-char fingerprint of the key
+	signerFingerprint string
+}
+
+func (r Result) IsValid() bool {
+	return r.isValid
+}
+
+func (r Result) IsTrusted() bool {
+	return r.isTrusted
+}
+
+func (r Result) SignerFingerprint() string {
+	return r.signerFingerprint
+}
+
 type TrustedImageDistributorKeyRing interface {
 	// More efficient verification if signatureFile name matches the corresponding key ID
 	// Tries to verify with all known otherwise
-	VerifyDetached(signatureFilePath string, signedFilePath string) (bool, error)
+	VerifyDetached(signatureFilePath string, signedFilePath string) (Result, error)
 }
 
 type trustedImageDistributorKeyRing struct {
 	entities openpgp.EntityList
+
+	isLoaded map[string]bool
 
 	// byKeyID maps uppercase hex strings (short, long, full-fingerprint) to
 	// the entity that owns the corresponding key, for O(1) lookup.
@@ -44,7 +67,8 @@ func New() (TrustedImageDistributorKeyRing, error) {
 	}
 
 	kr := &trustedImageDistributorKeyRing{
-		byKeyID: make(map[string]*openpgp.Entity),
+		isLoaded: make(map[string]bool),
+		byKeyID:  make(map[string]*openpgp.Entity),
 	}
 
 	for _, entry := range entries {
@@ -65,27 +89,24 @@ func New() (TrustedImageDistributorKeyRing, error) {
 	return kr, nil
 }
 
-func (kr *trustedImageDistributorKeyRing) VerifyDetached(signatureFilePath string, signedFilePath string) (bool, error) {
+func (kr *trustedImageDistributorKeyRing) VerifyDetached(signatureFilePath string, signedFilePath string) (Result, error) {
 	keyID, ok := parseKeyID(filepath.Base(signatureFilePath))
 	if !ok {
-		return checkArmoredDetached(kr.entities, signatureFilePath, signedFilePath)
+		return kr.verifyWithCandidates(kr.entities, signatureFilePath, signedFilePath)
 	}
 
 	targetEntity, ok := kr.byKeyID[keyID]
-	if !ok {
-		return checkArmoredDetached(kr.entities, signatureFilePath, signedFilePath)
-	}
-	if targetEntity == nil {
-		return checkArmoredDetached(kr.entities, signatureFilePath, signedFilePath)
+	if !ok || targetEntity == nil {
+		return kr.verifyWithCandidates(kr.entities, signatureFilePath, signedFilePath)
 	}
 
 	singleCandidate := openpgp.EntityList{targetEntity}
-	ok, err := checkArmoredDetached(singleCandidate, signatureFilePath, signedFilePath)
-	if ok && err != nil {
-		return true, nil
+	result, err := kr.verifyWithCandidates(singleCandidate, signatureFilePath, signedFilePath)
+	if err == nil {
+		return result, nil
 	}
 
-	return checkArmoredDetached(kr.entities, signatureFilePath, signedFilePath)
+	return kr.verifyWithCandidates(kr.entities, signatureFilePath, signedFilePath)
 }
 
 // --------------------------------------------------------------------------
@@ -110,8 +131,17 @@ func (kr *trustedImageDistributorKeyRing) loadTrustedKeyFile(path string) (int, 
 	}
 
 	for _, e := range entities {
+		if e == nil {
+			continue
+		}
+		isLoaded, ok := kr.isLoaded[path]
+		if ok && isLoaded {
+			continue
+		}
+
 		kr.entities = append(kr.entities, e)
 		kr.indexEntity(e)
+		kr.isLoaded[path] = true
 	}
 	return len(entities), nil
 }
@@ -148,29 +178,65 @@ func (kr *trustedImageDistributorKeyRing) indexPublicKey(pk *packet.PublicKey, o
 	}
 }
 
-func checkArmoredDetached(candidates openpgp.EntityList, signaturePath string, signedDataPath string) (bool, error) {
+func (kr *trustedImageDistributorKeyRing) verifyWithCandidates(candidates openpgp.EntityList, signaturePath string, signedDataPath string) (Result, error) {
+	signer, err := checkArmoredDetached(candidates, signaturePath, signedDataPath)
+	if err != nil {
+		return Result{}, err
+	}
+	if signer == nil {
+		return Result{}, errors.New("signature verified but signer not available")
+	}
+
+	result := Result{
+		isValid:           true,
+		isTrusted:         kr.isTrustedSigner(signer),
+		signerFingerprint: longKeyIDFromEntity(signer),
+	}
+	return result, nil
+}
+
+func checkArmoredDetached(candidates openpgp.EntityList, signaturePath string, signedDataPath string) (*openpgp.Entity, error) {
 	signatureReader, err := os.Open(signaturePath)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	defer signatureReader.Close()
 
 	signedDataReader, err := os.Open(signedDataPath)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	defer signedDataReader.Close()
 
-	_, err = openpgp.CheckArmoredDetachedSignature(
+	signer, err := openpgp.CheckArmoredDetachedSignature(
 		candidates,
 		signedDataReader,
 		signatureReader,
 		nil, // nil uses the library's secure defaults
 	)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	return true, nil
+	return signer, nil
+}
+
+func (kr *trustedImageDistributorKeyRing) isTrustedSigner(entity *openpgp.Entity) bool {
+	if entity == nil || entity.PrimaryKey == nil {
+		return false
+	}
+	full := fmt.Sprintf("%X", entity.PrimaryKey.Fingerprint)
+	return kr.byKeyID[full] == entity
+}
+
+func longKeyIDFromEntity(entity *openpgp.Entity) string {
+	if entity == nil || entity.PrimaryKey == nil {
+		return ""
+	}
+	fp := entity.PrimaryKey.Fingerprint
+	if len(fp) < 8 {
+		return ""
+	}
+	return fmt.Sprintf("%X", fp[len(fp)-8:])
 }
 
 func parseKeyID(filename string) (string, bool) {
@@ -181,6 +247,12 @@ func parseKeyID(filename string) (string, bool) {
 	id := strings.TrimSuffix(filename, suffix)
 	if id == "" {
 		return "", false
+	}
+	// validate that id is hex
+	for _, c := range id {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return "", false
+		}
 	}
 	return strings.ToUpper(id), true
 }

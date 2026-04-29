@@ -15,7 +15,6 @@ import (
 	"net"
 	"net/netip"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,6 +22,7 @@ import (
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/attest"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/crypto"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/domain"
+	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/keyring"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/packager"
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/sanitize"
 	pb "gitlab.com/dpss-inesc-id/achilles-cvm/client/pb/evident_protocol/v1"
@@ -35,31 +35,13 @@ type certificateIssuerVerifierServiceImpl struct {
 
 	caCerts []*x509.Certificate
 	caKey   *ecdsa.PrivateKey
-
-	gpgCmd string
 }
 
-func NewCertificateIssuerVerifierServiceImpl(caCerts []*x509.Certificate, caKey *ecdsa.PrivateKey) (pb.CertificateIssuerVerifierServiceServer, error) {
-	c := &certificateIssuerVerifierServiceImpl{
+func NewCertificateIssuerVerifierServiceImpl(caCerts []*x509.Certificate, caKey *ecdsa.PrivateKey) pb.CertificateIssuerVerifierServiceServer {
+	return &certificateIssuerVerifierServiceImpl{
 		caCerts: caCerts,
 		caKey:   caKey,
 	}
-	err := c.checkRequiredExternalCommands()
-	if err != nil {
-		return nil, err
-	}
-	return c, nil
-}
-
-func (c *certificateIssuerVerifierServiceImpl) checkRequiredExternalCommands() error {
-	var err error
-
-	c.gpgCmd, err = exec.LookPath("gpg")
-	if err != nil {
-		return fmt.Errorf("`gpg` command is not present in PATH")
-	}
-
-	return nil
 }
 
 func (c *certificateIssuerVerifierServiceImpl) SubmitTrustedPackage(ctx context.Context, request *pb.MinimalPackage) (*pb.SignedPackageSubmissionResult, error) {
@@ -133,27 +115,32 @@ func (c *certificateIssuerVerifierServiceImpl) SubmitTrustedPackage(ctx context.
 	validSignatureFileNames := make([]string, 0, len(request.SerializedManifestSignature))
 	hasTrustedSignature := false
 
+	kr, err := keyring.New()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize keyring: %w", err)
+	}
+
 	for i, sig := range request.SerializedManifestSignature {
 		rawSigPath := filepath.Join(stagingDirPath, fmt.Sprintf("incoming-%d.sig.asc", i))
 		if err := os.WriteFile(rawSigPath, sig, 0o644); err != nil {
 			return nil, fmt.Errorf("failed to write signature %d: %w", i, err)
 		}
 
-		result, err := c.verifyManifestSignatureWithGPG(rawSigPath, manifestPath)
+		result, err := kr.VerifyDetached(rawSigPath, manifestPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to verify signature %d: %w", i, err)
 		}
 
-		if !result.isValid {
+		if !result.IsValid() {
 			_ = os.Remove(rawSigPath)
 			continue
 		}
 
-		if result.isTrusted {
+		if result.IsTrusted() {
 			hasTrustedSignature = true
 		}
 
-		safeKeyID := result.signerKeyID
+		safeKeyID := result.SignerFingerprint()
 		if safeKeyID == "" {
 			safeKeyID = fmt.Sprintf("UNKNOWN-%d", i)
 		}
@@ -261,52 +248,52 @@ type gpgSignatureVerificationResult struct {
 	signerKeyID string
 }
 
-func (c *certificateIssuerVerifierServiceImpl) verifyManifestSignatureWithGPG(sigPath string, manifestPath string) (*gpgSignatureVerificationResult, error) {
-	cmd := exec.Command(c.gpgCmd, "--batch", "--status-fd=1", "--verify", sigPath, manifestPath)
+// func (c *certificateIssuerVerifierServiceImpl) verifyManifestSignatureWithGPG(sigPath string, manifestPath string) (*gpgSignatureVerificationResult, error) {
+// 	cmd := exec.Command(c.gpgCmd, "--batch", "--status-fd=1", "--verify", sigPath, manifestPath)
 
-	statusOutput, err := cmd.CombinedOutput()
-	statusLines := strings.Split(string(statusOutput), "\n")
+// 	statusOutput, err := cmd.CombinedOutput()
+// 	statusLines := strings.Split(string(statusOutput), "\n")
 
-	result := &gpgSignatureVerificationResult{}
-	for _, line := range statusLines {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "[GNUPG:] ") {
-			continue
-		}
+// 	result := &gpgSignatureVerificationResult{}
+// 	for _, line := range statusLines {
+// 		line = strings.TrimSpace(line)
+// 		if !strings.HasPrefix(line, "[GNUPG:] ") {
+// 			continue
+// 		}
 
-		fields := strings.Fields(strings.TrimPrefix(line, "[GNUPG:] "))
-		if len(fields) == 0 {
-			continue
-		}
+// 		fields := strings.Fields(strings.TrimPrefix(line, "[GNUPG:] "))
+// 		if len(fields) == 0 {
+// 			continue
+// 		}
 
-		switch fields[0] {
-		case "VALIDSIG":
-			result.isValid = true
-			if len(fields) > 1 {
-				fingerprint := strings.ToUpper(fields[1])
-				if len(fingerprint) >= 16 {
-					candidate := fingerprint[len(fingerprint)-16:]
-					if keyID, keyErr := sanitize.KeyId(candidate); keyErr == nil {
-						result.signerKeyID = strings.ToUpper(keyID)
-					}
-				}
-			}
-		case "TRUST_ULTIMATE", "TRUST_FULLY", "TRUST_MARGINAL":
-			result.isTrusted = true
-		}
-	}
+// 		switch fields[0] {
+// 		case "VALIDSIG":
+// 			result.isValid = true
+// 			if len(fields) > 1 {
+// 				fingerprint := strings.ToUpper(fields[1])
+// 				if len(fingerprint) >= 16 {
+// 					candidate := fingerprint[len(fingerprint)-16:]
+// 					if keyID, keyErr := sanitize.KeyId(candidate); keyErr == nil {
+// 						result.signerKeyID = strings.ToUpper(keyID)
+// 					}
+// 				}
+// 			}
+// 		case "TRUST_ULTIMATE", "TRUST_FULLY", "TRUST_MARGINAL":
+// 			result.isTrusted = true
+// 		}
+// 	}
 
-	if !result.isValid {
-		if err == nil {
-			return result, nil
-		}
-		return result, nil
-	}
+// 	if !result.isValid {
+// 		if err == nil {
+// 			return result, nil
+// 		}
+// 		return result, nil
+// 	}
 
-	// If GPG declared a valid signature, ignore non-zero exit codes that may be
-	// caused by trust warnings; trust is handled via status parsing above.
-	return result, nil
-}
+// 	// If GPG declared a valid signature, ignore non-zero exit codes that may be
+// 	// caused by trust warnings; trust is handled via status parsing above.
+// 	return result, nil
+// }
 
 func (c *certificateIssuerVerifierServiceImpl) RequestInstanceKeyAttestationCertificate(ctx context.Context, request *pb.SignedAdditionalArtifactsBundle) (*pb.SignedCertificateChain, error) {
 	var (
