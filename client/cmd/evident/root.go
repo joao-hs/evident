@@ -10,6 +10,12 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "evident",
 	Short: "evident is a CLI application to manage confidential virtual machines",
+	Long: `Evident helps manage confidential virtual machines, including building, measuring,
+attesting, packaging, and serving attestation-related workflows.
+
+Use "evident <command> --help" for details on a specific subcommand.`,
+	Example: `  evident --help
+  evident attest --help`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		dotevident.Get()
 	},

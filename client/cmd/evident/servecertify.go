@@ -14,15 +14,15 @@ import (
 )
 
 var serveCertifyCmd = &cobra.Command{
-	Use:   "serve-certify <ca-cert> <ca-key> [--grpc-cert <path> --grpc-key <path>] [--port <port>] [--interactive]",
+	Use:   "serve-certify <ca-cert> <ca-key>",
 	Short: "Issue certificates if the client can be remotely attested",
+	Long: `Starts a gRPC server that issues certificates after successful attestation.
 
-	Args: cobra.ExactArgs(2),
-
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		setupLogger(cmd)
-		debugPrintFlags(cmd)
-	},
+Provide a PEM-encoded CA cert and key. Use --grpc-cert/--grpc-key to enable TLS for the gRPC endpoint. Use --interactive to require manual approval.`,
+	Example: `  evident serve-certify ./ca.pem ./ca.key --port 5010
+  evident serve-certify ./ca.pem ./ca.key --grpc-cert ./server.pem --grpc-key ./server.key --interactive`,
+	Args:    cobra.ExactArgs(2),
+	PreRunE: preRunWithLogger,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var err error

@@ -41,6 +41,14 @@ func setupLogger(cmd *cobra.Command) error {
 	return nil
 }
 
+func preRunWithLogger(cmd *cobra.Command, args []string) error {
+	if err := setupLogger(cmd); err != nil {
+		return err
+	}
+	debugPrintFlags(cmd)
+	return nil
+}
+
 func validateToAbsFilepath(filePath string, pathName string) (string, error) {
 	if filePath == "" {
 		return "", fmt.Errorf("path for %s is empty", pathName)

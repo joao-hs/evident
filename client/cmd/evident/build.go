@@ -10,15 +10,14 @@ import (
 )
 
 var buildCmd = &cobra.Command{
-	Use:   "build <path-to>/flake.nix <package-variation> <output-path>",
-	Short: "Build VM image from Nix flake",
+	Use:   "build <flake-path> <variation> <output-path>",
+	Short: "Build a VM image from a Nix flake",
+	Long: `Builds a VM image from a Nix flake and variation.
 
-	Args: cobra.ExactArgs(3),
-
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		setupLogger(cmd)
-		debugPrintFlags(cmd)
-	},
+Use --show to print the equivalent commands without executing them.`,
+	Example: `  evident build ./flake.nix my-variation ./out/image`,
+	Args:    cobra.ExactArgs(3),
+	PreRunE: preRunWithLogger,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var err error

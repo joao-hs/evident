@@ -13,15 +13,15 @@ import (
 )
 
 var attestCmd = &cobra.Command{
-	Use:   "attest <target-ip> <snp|tdx> <avm|ec2|gce>",
+	Use:   "attest <target-ip> snp <ec2|gce>",
 	Short: "Attest a remote confidential VM that is running an Evident server",
+	Long: `Attest a remote confidential VM that is running an Evident server.
 
-	Args: cobra.ExactArgs(3),
-
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		setupLogger(cmd)
-		debugPrintFlags(cmd)
-	},
+One of --expected-pcrs or --use-trusted-packages is required. For EC2 targets, provide --instance-id, if you are the confidential VM owner.`,
+	Example: `  evident attest 10.0.0.5 snp ec2 --expected-pcrs ./pcrs.json --out-report ./attestation.html
+  evident attest 10.0.0.5 snp gce --use-trusted-packages`,
+	Args:    cobra.ExactArgs(3),
+	PreRunE: preRunWithLogger,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var err error

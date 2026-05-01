@@ -11,15 +11,15 @@ import (
 )
 
 var measureCmd = &cobra.Command{
-	Use:   "measure <path-to-image> [<output-file>]",
+	Use:   "measure <image-path> [output-file]",
 	Short: "Measure expected TPM values for PCRs 4, 11 and 12",
+	Long: `Measures a VM image and outputs expected PCR digests as JSON.
 
-	Args: cobra.RangeArgs(1, 2),
-
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		setupLogger(cmd)
-		debugPrintFlags(cmd)
-	},
+If output-file is omitted, results are printed to stdout. Use --show to print the equivalent commands without executing them.`,
+	Example: `  evident measure ./image.raw ./expected-pcrs.json
+  evident measure ./image.raw`,
+	Args:    cobra.RangeArgs(1, 2),
+	PreRunE: preRunWithLogger,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var err error
