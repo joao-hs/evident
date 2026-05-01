@@ -2,7 +2,8 @@
   description = "Evident Go application (reproducible build on nixpkgs-unstable)";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # https://releases.nixos.org/nixos/unstable/nixos-26.05pre964859.b40629efe5d6
+    nixpkgs.url = "github:nixos/nixpkgs?ref=b40629efe5d6ec48dd1efba650c797ddbd39ace0";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
