@@ -14,7 +14,7 @@ import (
 )
 
 var serveCertifyCmd = &cobra.Command{
-	Use:   "serve-certify <ca-cert> <ca-key> [--grpc-cert <path> --grpc-key <path>] [--port <port>]",
+	Use:   "serve-certify <ca-cert> <ca-key> [--grpc-cert <path> --grpc-key <path>] [--port <port>] [--interactive]",
 	Short: "Issue certificates if the client can be remotely attested",
 
 	Args: cobra.ExactArgs(2),
@@ -44,6 +44,11 @@ var serveCertifyCmd = &cobra.Command{
 		caKey, err := validateCAKeyPath(args[1])
 		if err != nil {
 			return err
+		}
+
+		interactive, err := cmd.Flags().GetBool("interactive")
+		if err != nil {
+			panic("could not parse 'interactive' flag")
 		}
 
 		grpcCertPathFlag, err := cmd.Flags().GetString("grpc-cert")
@@ -84,7 +89,7 @@ var serveCertifyCmd = &cobra.Command{
 
 		cmd.SilenceUsage = true
 
-		return servecertify.Serve(port, caCerts, caKey, tlsConfig)
+		return servecertify.Serve(port, caCerts, caKey, tlsConfig, interactive)
 	},
 }
 
@@ -158,6 +163,7 @@ func validateGRPCKeyPath(path string) (string, error) {
 
 func init() {
 	serveCertifyCmd.Flags().StringP("port", "p", "5010", "port to listen on")
+	serveCertifyCmd.Flags().Bool("interactive", false, "require manual approval before issuing certificates")
 	serveCertifyCmd.Flags().String("grpc-cert", "", "path to gRPC server TLS certificate (PEM)")
 	serveCertifyCmd.Flags().String("grpc-key", "", "path to gRPC server TLS private key (PEM)")
 	rootCmd.AddCommand(serveCertifyCmd)

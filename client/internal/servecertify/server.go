@@ -1,11 +1,13 @@
 package servecertify
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/tls"
 	"crypto/x509"
 	"net"
 	"strconv"
+	"sync"
 
 	"gitlab.com/dpss-inesc-id/achilles-cvm/client/internal/global/log"
 	pb "gitlab.com/dpss-inesc-id/achilles-cvm/client/pb/evident_protocol/v1"
@@ -13,21 +15,31 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
-func Serve(port int, caCert []*x509.Certificate, caKey *ecdsa.PrivateKey, tlsConfig *tls.Config) error {
+func Serve(port int, caCert []*x509.Certificate, caKey *ecdsa.PrivateKey, tlsConfig *tls.Config, interactive bool) error {
 	log.Get().Debugf("starting certificate issuer/verifier server on port %d", port)
 	log.Get().Debugf("configured CA certificates: %d", len(caCert))
 
-	var server *grpc.Server
+	if interactive {
+		log.Get().Info("interactive mode enabled: certificate issuance requires manual approval")
+	}
+
+	serverOptions := make([]grpc.ServerOption, 0, 2)
 	if tlsConfig != nil {
 		creds := credentials.NewTLS(tlsConfig)
-		server = grpc.NewServer(grpc.Creds(creds))
+		serverOptions = append(serverOptions, grpc.Creds(creds))
 		log.Get().Debug("grpc server initialized with TLS credentials")
 	} else {
-		server = grpc.NewServer()
 		log.Get().Debug("grpc server initialized without TLS")
 	}
 
-	certIssuerVerifierService := NewCertificateIssuerVerifierServiceImpl(caCert, caKey)
+	if interactive {
+		var certIssueMutex sync.Mutex
+		serverOptions = append(serverOptions, grpc.UnaryInterceptor(certificateIssueMutexInterceptor(&certIssueMutex)))
+	}
+
+	server := grpc.NewServer(serverOptions...)
+
+	certIssuerVerifierService := NewCertificateIssuerVerifierServiceImpl(caCert, caKey, interactive)
 	pb.RegisterCertificateIssuerVerifierServiceServer(server, certIssuerVerifierService)
 	log.Get().Debug("certificate issuer/verifier service registered")
 
@@ -38,4 +50,15 @@ func Serve(port int, caCert []*x509.Certificate, caKey *ecdsa.PrivateKey, tlsCon
 	log.Get().Debugf("listening on %s", listener.Addr().String())
 
 	return server.Serve(listener)
+}
+
+func certificateIssueMutexInterceptor(mu *sync.Mutex) grpc.UnaryServerInterceptor {
+	certificateIssueMethod := "/" + pb.CertificateIssuerVerifierService_ServiceDesc.ServiceName + "/RequestInstanceKeyAttestationCertificate"
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		if info.FullMethod == certificateIssueMethod {
+			mu.Lock()
+			defer mu.Unlock()
+		}
+		return handler(ctx, req)
+	}
 }

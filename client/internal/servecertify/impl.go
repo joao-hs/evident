@@ -34,20 +34,26 @@ import (
 type certificateIssuerVerifierServiceImpl struct {
 	pb.UnimplementedCertificateIssuerVerifierServiceServer
 
-	caCerts []*x509.Certificate
-	caKey   *ecdsa.PrivateKey
+	caCerts     []*x509.Certificate
+	caKey       *ecdsa.PrivateKey
+	interactive bool
 }
 
-func NewCertificateIssuerVerifierServiceImpl(caCerts []*x509.Certificate, caKey *ecdsa.PrivateKey) pb.CertificateIssuerVerifierServiceServer {
+func NewCertificateIssuerVerifierServiceImpl(caCerts []*x509.Certificate, caKey *ecdsa.PrivateKey, interactive bool) pb.CertificateIssuerVerifierServiceServer {
 	return &certificateIssuerVerifierServiceImpl{
-		caCerts: caCerts,
-		caKey:   caKey,
+		caCerts:     caCerts,
+		caKey:       caKey,
+		interactive: interactive,
 	}
 }
 
 func (c *certificateIssuerVerifierServiceImpl) SubmitTrustedPackage(ctx context.Context, request *pb.MinimalPackage) (*pb.SignedPackageSubmissionResult, error) {
 	var err error
 	_ = ctx
+
+	if c.interactive {
+		return nil, fmt.Errorf("trusted package submissions are disabled in interactive mode")
+	}
 
 	log.Get().Debugf("received trusted package submission: manifest=%d bytes, signatures=%d, expected-measurements=%d bytes", len(request.SerializedManifest), len(request.SerializedManifestSignature), len(request.SerializedExpectedMeasurements))
 
@@ -370,19 +376,6 @@ func (c *certificateIssuerVerifierServiceImpl) RequestInstanceKeyAttestationCert
 		return nil, err
 	}
 
-	_, err = verifier.Attest(
-		targetAddr,
-		5000,
-		nil, // Option: None -> Derive CPU count
-		nil, // Option: None -> No EC2 endorsement of EK
-		nil, // Option: None -> Use trusted packages
-		&additionalArtifactsBundle,
-	)
-	if err != nil {
-		return nil, err
-	}
-	log.Get().Debugf("attestation succeeded for %s", targetAddr.String())
-
 	csr := additionalArtifactsBundle.GetInstanceCsr()
 	if csr == nil {
 		return nil, fmt.Errorf("missing CSR in additional artifacts bundle")
@@ -394,6 +387,41 @@ func (c *certificateIssuerVerifierServiceImpl) RequestInstanceKeyAttestationCert
 
 	if csr.Format != pb.CSRFormat_CSR_FORMAT_PKCS10 {
 		return nil, fmt.Errorf("unsupported CSR format: %s", csr.Format.String())
+	}
+
+	reportInput, attestErr := verifier.Attest(
+		targetAddr,
+		5000,
+		nil, // Option: None -> Derive CPU count
+		nil, // Option: None -> No EC2 endorsement of EK
+		nil, // Option: None -> Use trusted packages
+		&additionalArtifactsBundle,
+	)
+	if c.interactive {
+		if attestErr != nil {
+			// users may issue the certificate even if attestation fails
+			log.Get().Warnln("Attestation failed:", attestErr)
+		} else {
+			log.Get().Infoln("Attestation successful!")
+		}
+
+		reportPath, err := writeAttestationReport(reportInput)
+		if err != nil {
+			return nil, err
+		}
+
+		approved, err := promptForCertificateApproval(ctx, reportPath)
+		if err != nil {
+			return nil, err
+		}
+		if !approved {
+			return nil, fmt.Errorf("certificate issuance rejected by operator")
+		}
+	} else {
+		if attestErr != nil {
+			return nil, fmt.Errorf("attestation failed: %w", attestErr)
+		}
+		log.Get().Debug("attestation successful")
 	}
 
 	certChain, err := c.issueCertificate(csr.Data)
