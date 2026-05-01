@@ -1,18 +1,16 @@
 {
   "nodes": {
-    "evident-server": {
+    "evident-instance": {
       "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ],
+        "nixpkgs": ["nixpkgs"],
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "path": "server",
+        "path": "instance",
         "type": "path"
       },
       "original": {
-        "path": "server",
+        "path": "instance",
         "type": "path"
       },
       "parent": []
@@ -68,24 +66,21 @@
     },
     "root": {
       "inputs": {
-        "evident-server": "evident-server",
+        "evident-instance": "evident-instance",
         "flake-parts": "flake-parts",
         "nixpkgs": "nixpkgs"
       }
     },
     "rust-overlay": {
       "inputs": {
-        "nixpkgs": [
-          "evident-server",
-          "nixpkgs"
-        ]
+        "nixpkgs": ["evident-instance", "nixpkgs"]
       },
       "locked": {
-        "lastModified": 1769568593,
-        "narHash": "sha256-vf3cZf8imUlPzFtICa1uyReDzoPV0XhHOIRM3tqI5VY=",
+        "lastModified": 1773716879,
+        "narHash": "sha256-vXCTasEzzTTd0ZGEuyle20H2hjRom66JeNr7i2ktHD0=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "6fe5039018d05cee5d01dda7df1c0846fb7943a4",
+        "rev": "1a9ddeb45c5751b800331363703641b84d1f41f0",
         "type": "github"
       },
       "original": {

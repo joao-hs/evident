@@ -30,7 +30,6 @@
             evidentInstancePackage = mkBundle {
               mandatoryFeature = "snp_gce";
               optionalFeatures = [ "debug" ];
-              certificateIssuerEndpoint = "evident-ca.joaohs.com:5010";
             };
             withDebug = true;
             withProfiling = true;
@@ -42,9 +41,7 @@
               mandatoryFeature = "snp_gce";
               optionalFeatures = [
                 "debug"
-                # "request_certificate"
               ];
-              certificateIssuerEndpoint = "evident-ca.joaohs.com:5010";
             };
             withDebug = true;
           };
@@ -54,7 +51,6 @@
             evidentInstancePackage = mkBundle {
               mandatoryFeature = "snp_ec2";
               optionalFeatures = [ "debug" ];
-              certificateIssuerEndpoint = "evident-ca.joaohs.com:5010";
             };
             withDebug = true;
             withProfiling = true;
@@ -66,12 +62,9 @@
               mandatoryFeature = "snp_ec2";
               optionalFeatures = [
                 "debug"
-                # "request_certificate"
               ];
-              certificateIssuerEndpoint = "evident-ca.joaohs.com:5010";
             };
             withDebug = true;
-            withProfiling = true;
           };
         };
       };
