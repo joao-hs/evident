@@ -38,7 +38,7 @@ prepare-client-env: build-client
         git add .
     cp {{ CLIENT_DIR }}/{{ CLIENT_BIN }} {{ TESTENV_DIR }}
 
-install-provider:
+install-provider: gen-proto-client
     cd {{ CLIENT_DIR }} && go build -o {{ GO_INSTALL_DIR }}/terraform-provider-evident {{ PROVIDER_MAIN_PATH }}
 
 install-client: build-client

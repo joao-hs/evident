@@ -8,7 +8,14 @@ LIMA_YAML_TMPL=$(realpath $SRCDIR/config/lima.yaml.j2)
 
 source $SRCDIR/env.sh
 
-jinja2 $LIMA_YAML_TMPL -o $LIMA_YAML -D project="$(realpath $SRCDIR/..)" -D arch="$(uname -m)"
+if ! command -v envsubst &> /dev/null
+then
+    echo "envsubst could not be found, please install it to continue"
+    echo "On Debian/Ubuntu: sudo apt install gettext-base"
+    exit
+fi
+
+PROJECT="$(realpath $SRCDIR/..)" ARCH="$(uname -m)" envsubst < "$LIMA_YAML_TMPL" > "$LIMA_YAML"
 echo "Warning: provisioning scripts take around 10 minutes to complete"
 limactl create --name $VM_NAME $LIMA_YAML
 limactl start $VM_NAME

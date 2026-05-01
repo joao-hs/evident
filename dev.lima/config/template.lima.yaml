@@ -1,5 +1,5 @@
 mounts:
-  - location: "{{ project }}"
+  - location: "${PROJECT}"
     mountPoint: /home/debian/project
     writable: true
 cpus: 4       # default
@@ -8,4 +8,4 @@ disk: 150GiB   # default
 base:
   - ./base.yaml
 param:
-  arch: "{{ arch }}"
+  arch: "${ARCH}"
