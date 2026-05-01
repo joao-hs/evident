@@ -17,9 +17,15 @@ func Serve(port int, caCert []*x509.Certificate, caKey *ecdsa.PrivateKey, tlsCon
 	log.Get().Debugf("starting certificate issuer/verifier server on port %d", port)
 	log.Get().Debugf("configured CA certificates: %d", len(caCert))
 
-	creds := credentials.NewTLS(tlsConfig)
-	server := grpc.NewServer(grpc.Creds(creds))
-	log.Get().Debug("grpc server initialized with TLS credentials")
+	var server *grpc.Server
+	if tlsConfig != nil {
+		creds := credentials.NewTLS(tlsConfig)
+		server = grpc.NewServer(grpc.Creds(creds))
+		log.Get().Debug("grpc server initialized with TLS credentials")
+	} else {
+		server = grpc.NewServer()
+		log.Get().Debug("grpc server initialized without TLS")
+	}
 
 	certIssuerVerifierService := NewCertificateIssuerVerifierServiceImpl(caCert, caKey)
 	pb.RegisterCertificateIssuerVerifierServiceServer(server, certIssuerVerifierService)

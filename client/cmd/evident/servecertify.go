@@ -14,10 +14,10 @@ import (
 )
 
 var serveCertifyCmd = &cobra.Command{
-	Use:   "serve-certify <port> <ca-cert> <ca-key> <grpc-cert> <grpc-key>",
+	Use:   "serve-certify <port> <ca-cert> <ca-key> [flags]",
 	Short: "Issue certificates if the client can be remotely attested",
 
-	Args: cobra.ExactArgs(5),
+	Args: cobra.ExactArgs(3),
 
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		setupLogger(cmd)
@@ -42,24 +42,40 @@ var serveCertifyCmd = &cobra.Command{
 			return err
 		}
 
-		gRPCCertPath, err := validateGRPCCertPath(args[3])
+		grpcCertPathFlag, err := cmd.Flags().GetString("grpc-cert")
 		if err != nil {
-			return err
+			panic("could not parse 'grpc-cert' flag")
+		}
+		grpcKeyPathFlag, err := cmd.Flags().GetString("grpc-key")
+		if err != nil {
+			panic("could not parse 'grpc-key' flag")
 		}
 
-		gRPCKeyPath, err := validateGRPCKeyPath(args[4])
-		if err != nil {
-			return err
-		}
+		var tlsConfig *tls.Config
+		if grpcCertPathFlag != "" || grpcKeyPathFlag != "" {
+			if grpcCertPathFlag == "" || grpcKeyPathFlag == "" {
+				return fmt.Errorf("both --grpc-cert and --grpc-key must be set to enable TLS")
+			}
 
-		gRPCCert, err := tls.LoadX509KeyPair(gRPCCertPath, gRPCKeyPath)
-		if err != nil {
-			return err
-		}
-		tlsConfig := &tls.Config{
-			Certificates: []tls.Certificate{gRPCCert},
-			MinVersion:   tls.VersionTLS12,
-			NextProtos:   []string{"h2"},
+			grpcCertPath, err := validateGRPCCertPath(grpcCertPathFlag)
+			if err != nil {
+				return err
+			}
+
+			grpcKeyPath, err := validateGRPCKeyPath(grpcKeyPathFlag)
+			if err != nil {
+				return err
+			}
+
+			gRPCCert, err := tls.LoadX509KeyPair(grpcCertPath, grpcKeyPath)
+			if err != nil {
+				return err
+			}
+			tlsConfig = &tls.Config{
+				Certificates: []tls.Certificate{gRPCCert},
+				MinVersion:   tls.VersionTLS12,
+				NextProtos:   []string{"h2"},
+			}
 		}
 
 		cmd.SilenceUsage = true
@@ -137,5 +153,7 @@ func validateGRPCKeyPath(path string) (string, error) {
 }
 
 func init() {
+	serveCertifyCmd.Flags().String("grpc-cert", "", "path to gRPC server TLS certificate (PEM)")
+	serveCertifyCmd.Flags().String("grpc-key", "", "path to gRPC server TLS private key (PEM)")
 	rootCmd.AddCommand(serveCertifyCmd)
 }
