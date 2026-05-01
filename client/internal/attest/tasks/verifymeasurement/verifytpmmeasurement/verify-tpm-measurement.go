@@ -49,7 +49,7 @@ func Task(ctx context.Context, input Input) (Output, error) {
 		if expectedMeasurementsPtr == nil {
 			return Output{}, fmt.Errorf("trusted package matching the final PCR digest %s has nil expected PCR digests", finalPCRDigest)
 		}
-		log.Get().Debugf("Expected PCR digests from the trusted package matching the final PCR digest %s: %+v", finalPCRDigest, expectedMeasurementsPtr)
+		log.Get().Debugf("Expected PCR digests from the trusted package matching the final PCR digest %s", finalPCRDigest)
 	}
 
 	log.Get().Debugln("Verifying the measurement from the TPM report matches the given expected measurements")
