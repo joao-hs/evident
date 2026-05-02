@@ -4,6 +4,7 @@ use rcgen::{
     BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair, KeyUsagePurpose,
     PKCS_ECDSA_P384_SHA384, PublicKeyData,
 };
+use sha2::{Digest, Sha256};
 use std::{
     fs,
     io::Write,
@@ -38,6 +39,45 @@ fn write_file(path: &str, contents: &[u8], mode: u32) -> Result<(), Box<dyn std:
     file.write_all(contents)?;
     set_owner_and_mode(Path::new(path), mode)?;
     Ok(())
+}
+
+const BASE62_ALPHABET: &[u8; 62] =
+    b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+fn base62_encode(bytes: &[u8]) -> String {
+    if bytes.is_empty() {
+        return String::new();
+    }
+
+    let mut digits: Vec<u8> = vec![0];
+    for &byte in bytes {
+        let mut carry = byte as u32;
+        for digit in digits.iter_mut() {
+            let value = (*digit as u32) * 256 + carry;
+            *digit = (value % 62) as u8;
+            carry = value / 62;
+        }
+        while carry > 0 {
+            digits.push((carry % 62) as u8);
+            carry /= 62;
+        }
+    }
+
+    let mut encoded = String::with_capacity(digits.len());
+    for digit in digits.iter().rev() {
+        encoded.push(BASE62_ALPHABET[*digit as usize] as char);
+    }
+
+    encoded
+}
+
+fn weak_identifier_from_spki(spki_der: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(spki_der);
+    let hash = hasher.finalize();
+
+    let encoded = base62_encode(hash.as_slice());
+    encoded.chars().take(12).collect()
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -93,16 +133,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             0o444,
         )?;
 
+        let weak_identifier = weak_identifier_from_spki(instance_public.as_slice());
+
         let mut params = CertificateParams::new(Vec::<String>::new())?;
         let mut dn = DistinguishedName::new();
-        dn.push(DnType::CommonName, "evident-instance");
+        dn.push(
+            DnType::CommonName,
+            format!("evident-instance-{weak_identifier}"),
+        );
         params.distinguished_name = dn;
-        params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
-        params.key_usages = vec![
-            KeyUsagePurpose::KeyCertSign,
-            KeyUsagePurpose::CrlSign,
-            KeyUsagePurpose::DigitalSignature,
-        ];
 
         // TODO: we can add SAN entries here if needed
         let csr = params.serialize_request(&instance_key)?;
@@ -112,6 +151,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             0o444,
         )?;
 
+        params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        params.key_usages = vec![
+            KeyUsagePurpose::KeyCertSign,
+            KeyUsagePurpose::CrlSign,
+            KeyUsagePurpose::DigitalSignature,
+        ];
         params.not_before = OffsetDateTime::now_utc();
         params.not_after = params.not_before + Duration::days(3650);
 

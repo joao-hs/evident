@@ -18,4 +18,5 @@ nix = { workspace = true }
 p384 = { workspace = true }
 rand_core = { workspace = true }
 rcgen = { workspace = true }
+sha2 = { workspace = true }
 time = { workspace = true }
