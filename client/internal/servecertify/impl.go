@@ -507,9 +507,10 @@ func (c *certificateIssuerVerifierServiceImpl) issueCertificate(csrPemBytes []by
 		EmailAddresses: csr.EmailAddresses,
 		URIs:           csr.URIs,
 
-		KeyUsage:              x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
 		BasicConstraintsValid: true,
+		IsCA:                  true,
+		MaxPathLen:            -1,
 	}
 
 	certDer, err := x509.CreateCertificate(

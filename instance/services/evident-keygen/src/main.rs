@@ -1,7 +1,7 @@
 use common_core::constants;
 use nix::unistd::{Gid, Uid, chown};
 use rcgen::{
-    BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair,
+    BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair, KeyUsagePurpose,
     PKCS_ECDSA_P384_SHA384, PublicKeyData,
 };
 use std::{
@@ -97,6 +97,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut dn = DistinguishedName::new();
         dn.push(DnType::CommonName, "evident-instance");
         params.distinguished_name = dn;
+        params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        params.key_usages = vec![
+            KeyUsagePurpose::KeyCertSign,
+            KeyUsagePurpose::CrlSign,
+            KeyUsagePurpose::DigitalSignature,
+        ];
 
         // TODO: we can add SAN entries here if needed
         let csr = params.serialize_request(&instance_key)?;
