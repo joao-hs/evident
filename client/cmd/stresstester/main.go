@@ -41,7 +41,7 @@ type TestResult struct {
 }
 
 const (
-	timeoutPerRequest = 2 * time.Minute
+	timeoutPerRequest = 1 * time.Minute
 )
 
 func doFetchEvidence(ctx context.Context, client *grpc.AttesterServiceClient) *Sample {
@@ -90,7 +90,7 @@ func progressiveLoad(hostIp string, cloudProvider domain.CloudServiceProvider) T
 	cfg.MaxRetries = 1
 
 	loadLevels := [...]int{1, 2, 4, 6, 8, 10, 12, 15, 20, 25, 30, 35, 40, 50}
-	clearingTime := [...]int{1, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0}
+	clearingTime := [...]int{1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0}
 
 	results := make([]StepResult, 0)
 	for i, loadLevel := range loadLevels {
@@ -149,12 +149,6 @@ func progressiveLoad(hostIp string, cloudProvider domain.CloudServiceProvider) T
 }
 
 func main() {
-	// usage: ./stresstester <host-ip-address>:<cloud-provider> [...]
-	if len(os.Args) < 3 {
-		fmt.Fprintf(os.Stderr, "usage: %s <host-ip-address>:<ec2|gce> [...]\n", os.Args[0])
-		os.Exit(1)
-	}
-
 	argSplit := make([][]string, len(os.Args)-1)
 	for i := 1; i < len(os.Args); i++ {
 		argSplit[i-1] = []string{}
