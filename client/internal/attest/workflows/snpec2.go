@@ -239,12 +239,12 @@ func RunSnpEc2AttestationWorkflow(
 		},
 	)
 	if err != nil {
-		log.Get().Warnf("Known issue: https://github.com/aws/uefi/issues/19; Measurement verification of the hardware evidence failed: %v; proceeding", err)
 		reportInput.Q15 = report.CheckResult{
 			Status: report.StatusSkip,
 			Tag:    "Mismatch",
-			Detail: report.Q15AwsKnownIssue(),
+			Detail: report.Q15HardwareMeasurementsMismatch(),
 		}
+		return err
 	} else {
 		reportInput.Q15 = report.CheckResult{
 			Status: report.StatusPass,

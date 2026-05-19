@@ -252,10 +252,6 @@ func Q15HardwareMeasurementsMismatch() string {
 	return "No, the measurements do not match the expected values."
 }
 
-func Q15AwsKnownIssue() string {
-	return "No, this matches the known issue <a href=\"https://github.com/aws/uefi/issues/19\">github.com/aws/uefi/issues/19</a>. It may indicate a version mismatch between the published firmware and the production firmware."
-}
-
 func Q16SoftwareMeasurementsMatch() string {
 	return "Yes, the PCR digest (PCRs 4, 11, 12) matches the expected value provided as input. If derived from the deployed VM image, this confirms the kernel, filesystem, and services at boot time correspond exactly to the expected software components."
 }

@@ -23,6 +23,9 @@ require (
 	google.golang.org/protobuf v1.36.11
 )
 
+replace github.com/virtee/sev-snp-measure-go => github.com/joao-hs/sev-snp-measure-go v0.0.0-20260513173729-614cc1fde56c
+
+// replace github.com/virtee/sev-snp-measure-go => github.com/joao-hs/sev-snp-measure-go v0.0.0-20250929083720-47a9b3fbc5f4
 require (
 	cel.dev/expr v0.25.1 // indirect
 	cloud.google.com/go v0.123.0 // indirect
